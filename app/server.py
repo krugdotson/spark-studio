@@ -36,6 +36,11 @@ CLIENT_ID = uuid.uuid4().hex
 PRESETS = json.loads((HERE / "presets.json").read_text())
 STYLES = {m: {s["id"]: s for s in lst} for m, lst in PRESETS["styles"].items()}
 MODES = {m["id"]: m for m in PRESETS["modes"]}
+VIDEO_MODES = ("t2v", "i2v")
+
+
+def status_key(mode, engine="wan"):
+    return f"{mode}:minimax" if engine == "minimax" else mode
 
 jobs: dict[str, dict] = {}
 by_prompt: dict[str, str] = {}
@@ -214,10 +219,14 @@ async def config():
     except Exception:
         online, have, stats = False, {}, {}
     for mode in MODES:
-        missing = [n for f, names in wf.required_files(mode, False).items() for n in names if n not in have.get(f, set())]
-        fast_missing = [n for n in wf.FAST_LORAS[mode] if n not in have.get("loras", set())]
-        status[mode] = {"ready": online and not missing, "fast_ready": online and not missing and not fast_missing,
-                        "missing": missing + fast_missing}
+        for engine in (wf.ENGINES if mode in VIDEO_MODES else ("wan",)):
+            base = wf.required_files(mode, False, engine)
+            full = wf.required_files(mode, True, engine)
+            missing = [n for f, names in base.items() for n in names if n not in have.get(f, set())]
+            fast_missing = [n for n in full.get("loras", []) if n not in have.get("loras", set()) and n not in missing]
+            status[status_key(mode, engine)] = {"ready": online and not missing,
+                                                "fast_ready": online and not missing and not fast_missing,
+                                                "missing": missing + fast_missing}
     dev = (stats.get("devices") or [{}])[0]
     return {
         "online": online,
@@ -228,6 +237,10 @@ async def config():
         "status": status,
         "image_aspects": list(wf.IMAGE_SIZES),
         "video_aspects": list(wf.VIDEO_SIZES["480p"]),
+        "engines": {
+            "wan": {"name": "WAN 2.2", "blurb": "Silent video", "resolutions": list(wf.VIDEO_SIZES), "seconds": [3, 5, 8], "pack": None},
+            "minimax": {"name": "MiniMax H3", "blurb": "Video with sound", "resolutions": list(wf.MINIMAX_SIZES), "seconds": [5, 8, 10, 15], "pack": "minimax"},
+        },
     }
 
 
@@ -292,11 +305,13 @@ async def generate(body: dict):
 
     fast = bool(body.get("fast", True))
     cfg = await config()
-    st = cfg["status"][mode]
+    engine = body.get("engine") if mode in VIDEO_MODES and body.get("engine") in wf.ENGINES else "wan"
+    st = cfg["status"][status_key(mode, engine)]
     if not cfg["online"]:
         raise HTTPException(503, "ComfyUI isn't running. On the Spark: systemctl --user restart spark-studio-comfy")
     if not st["ready"] or (fast and not st["fast_ready"]):
-        raise HTTPException(409, f"Models for this mode aren't downloaded yet. On the Spark run: ./spark-studio models {mode}")
+        pack = "minimax" if engine == "minimax" else mode
+        raise HTTPException(409, f"Models for this aren't downloaded yet. On the Spark run: ./spark-studio models {pack}")
 
     seed = body.get("seed")
     seed = int(seed) if str(seed or "").strip().lstrip("-").isdigit() else random.randint(1, 2**50)
@@ -305,8 +320,9 @@ async def generate(body: dict):
         "aspect": body.get("aspect") or style.get("aspect") or ("16:9" if mode in ("t2v", "i2v") else "1:1"),
         "count": min(4, max(1, int(body.get("count", 1)))),
         "image": body.get("image"),
-        "seconds": min(10, max(1, float(body.get("seconds", 5)))),
-        "resolution": body.get("resolution") if body.get("resolution") in wf.VIDEO_SIZES else "480p",
+        "seconds": min(15, max(5, float(body.get("seconds", 5)))) if engine == "minimax" else min(10, max(1, float(body.get("seconds", 5)))),
+        "resolution": body.get("resolution") if body.get("resolution") in wf.sizes_for(engine) else "480p",
+        "engine": engine,
     }
     if mode == "edit":  # output follows the photo's shape; aspect is only used for display
         try:
@@ -319,7 +335,7 @@ async def generate(body: dict):
             w, h = await input_size(params["image"])
         except Exception:
             raise HTTPException(400, "Couldn't read the uploaded photo. Try adding it again.")
-        sizes = wf.VIDEO_SIZES[params["resolution"]]
+        sizes = wf.sizes_for(engine)[params["resolution"]]
         params["aspect"] = wf.nearest_aspect(w, h, sizes)
         params["size"] = sizes[params["aspect"]]
 
@@ -339,6 +355,7 @@ async def generate(body: dict):
         "user_prompt": user_prompt, "prompt": full, "seed": seed, "fast": fast, "aspect": params["aspect"],
         "seconds": params["seconds"] if mode in ("t2v", "i2v") else None,
         "resolution": params["resolution"] if mode in ("t2v", "i2v") else None,
+        "engine": engine if mode in VIDEO_MODES else None,
         "image": params["image"], "samplers": samplers, "status": "queued", "phase": "Waiting in line",
         "progress": 0.0, "created": time.time(), "outputs": [], "error": None,
     }

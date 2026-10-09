@@ -10,8 +10,11 @@ It makes four things:
 | Edit a photo | Qwen-Image-Edit 2511 (fp8) | ~21 GB extra (shares the text encoder with Image) |
 | Text to video | WAN 2.2 14B T2V (fp8) | ~38 GB |
 | Photo to video | WAN 2.2 14B I2V (fp8) | ~31 GB extra (shares the encoder with Text to video) |
+| Text or photo to video, **with sound** | MiniMax H3 (int8 + NVFP4 text encoder) | ~42 GB (pack name: `minimax`) |
 
-All four together come to about 120 GB of disk.
+Both video modes have a **Model** switch: WAN 2.2 makes silent clips; MiniMax H3 generates the picture and a
+matching stereo soundtrack (voices, sound effects, music) together, at 24 fps, 5 to 15 seconds. Describe the sound
+in your prompt. Everything together comes to about 160 GB of disk; download only the packs you want.
 
 ## Install
 

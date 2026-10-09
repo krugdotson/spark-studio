@@ -54,6 +54,32 @@ VIDEO_SIZES = {
 }
 VIDEO_FPS = 16
 
+# MiniMax H3: one model for text-to-video and photo-to-video, with native stereo audio.
+# Wiring follows ComfyUI's official "MiniMax H3" templates (video_minimax_h3_t2v / _i2v).
+MINIMAX = {
+    "diffusion_models": ["minimax_h3_fl2va_pruned_int8_convrot.safetensors"],
+    "text_encoders": ["qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"],
+    "vae": ["minimax_h3_video_vae_int8_convrot.safetensors", "minimax_h3_audio_vae_fp32.safetensors"],
+}
+MINIMAX_TURBO = "minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors"
+MINIMAX_FPS = 24
+# Sizes are multiples of 32. "480p" ~0.4 MP (template default); "768p" is H3's native canvas (768 short edge).
+MINIMAX_SIZES = {
+    "480p": {"16:9": (864, 480), "9:16": (480, 864), "1:1": (640, 640), "4:3": (736, 544), "3:4": (544, 736)},
+    "768p": {"16:9": (1344, 768), "9:16": (768, 1344), "1:1": (1024, 1024), "4:3": (1152, 864), "3:4": (864, 1152)},
+}
+ENGINES = ("wan", "minimax")
+
+
+def sizes_for(engine):
+    return MINIMAX_SIZES if engine == "minimax" else VIDEO_SIZES
+
+
+def minimax_frames(seconds):
+    # 24 fps, snapped up to H3's 17k+5 frame grid (same formula as the official template)
+    f = max(5, round(seconds * MINIMAX_FPS))
+    return f + (5 - f % 17) % 17
+
 
 def nearest_aspect(w, h, choices):
     r = w / h
@@ -175,11 +201,50 @@ def _video(p, mode):
     return g, ["sample_high", "sample_low"]
 
 
+def _minimax(p, mode):
+    fast = p.get("fast", True)
+    res = p.get("resolution", "480p")
+    w, h = p.get("size") or MINIMAX_SIZES.get(res, MINIMAX_SIZES["480p"]).get(p.get("aspect", "16:9"), (864, 480))
+    model = ["unet", 0]
+    g = {
+        "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": MINIMAX["diffusion_models"][0], "weight_dtype": "default"}},
+        "clip": {"class_type": "CLIPLoader", "inputs": {"clip_name": MINIMAX["text_encoders"][0], "type": "minimax", "device": "default"}},
+        "vae": {"class_type": "VAELoader", "inputs": {"vae_name": MINIMAX["vae"][0]}},
+        "audio_vae": {"class_type": "VAELoader", "inputs": {"vae_name": MINIMAX["vae"][1]}},
+    }
+    if fast:
+        g["lora"] = {"class_type": "LoraLoaderModelOnly", "inputs": {"model": model, "lora_name": MINIMAX_TURBO, "strength_model": 1.0}}
+        model = ["lora", 0]
+    cond = {"clip": ["clip", 0], "vae": ["vae", 0], "prompt": p["prompt"],
+            "width": w, "height": h, "length": minimax_frames(float(p.get("seconds", 5)))}
+    if mode == "i2v":
+        g["load"] = {"class_type": "LoadImage", "inputs": {"image": p["image"]}}
+        g["fit"] = {"class_type": "ImageScale", "inputs": {"image": ["load", 0], "upscale_method": "lanczos",
+                                                           "width": w, "height": h, "crop": "center"}}
+        cond["first_frame"] = ["fit", 0]
+    g.update({
+        "cond": {"class_type": "MiniMaxH3ImageToVideo", "inputs": cond},
+        "noise": {"class_type": "RandomNoise", "inputs": {"noise_seed": p["seed"]}},
+        "sampler_select": {"class_type": "KSamplerSelect", "inputs": {"sampler_name": "res_multistep"}},
+        "sigmas": {"class_type": "BasicScheduler", "inputs": {"model": model, "scheduler": "simple",
+                                                              "steps": 8 if fast else 20, "denoise": 1.0}},
+        "guider": {"class_type": "BasicGuider", "inputs": {"model": model, "conditioning": ["cond", 0]}},
+        "sampler": {"class_type": "SamplerCustomAdvanced", "inputs": {
+            "noise": ["noise", 0], "guider": ["guider", 0], "sampler": ["sampler_select", 0],
+            "sigmas": ["sigmas", 0], "latent_image": ["cond", 1]}},
+        "decode": {"class_type": "VAEDecode", "inputs": {"samples": ["sampler", 0], "vae": ["vae", 0]}},
+        "decode_audio": {"class_type": "VAEDecodeAudio", "inputs": {"samples": ["sampler", 0], "vae": ["audio_vae", 0]}},
+        "video": {"class_type": "CreateVideo", "inputs": {"images": ["decode", 0], "audio": ["decode_audio", 0], "fps": MINIMAX_FPS}},
+        "save": {"class_type": "SaveVideo", "inputs": {"video": ["video", 0], "filename_prefix": f"spark-studio/minimax-{mode}", "format": "auto"}},
+    })
+    return g, ["sampler"]
+
+
 BUILDERS = {
     "image": build_image,
     "edit": build_edit,
-    "t2v": lambda p: _video(p, "t2v"),
-    "i2v": lambda p: _video(p, "i2v"),
+    "t2v": lambda p: _minimax(p, "t2v") if p.get("engine") == "minimax" else _video(p, "t2v"),
+    "i2v": lambda p: _minimax(p, "i2v") if p.get("engine") == "minimax" else _video(p, "i2v"),
 }
 
 
@@ -187,7 +252,12 @@ def build(mode, params):
     return BUILDERS[mode](params)
 
 
-def required_files(mode, fast):
+def required_files(mode, fast, engine="wan"):
+    if engine == "minimax" and mode in ("t2v", "i2v"):
+        req = {k: list(v) for k, v in MINIMAX.items()}
+        if fast:
+            req["loras"] = [MINIMAX_TURBO]
+        return req
     req = {k: list(v) for k, v in REQUIRED[mode].items()}
     if fast:
         req.setdefault("loras", []).extend(FAST_LORAS[mode])
