@@ -22,6 +22,20 @@ download only the packs you want.
 **Downloading packs from the browser:** the **Models** button (top right of the page) lists every pack, shows what's
 installed, and has Download, Stop and Resume buttons with a progress bar. Downloads keep going if you close the page.
 
+## Demo install (hands-off)
+
+On a fresh DGX Spark, two commands take it from nothing to a tested, working studio:
+
+```bash
+git clone https://github.com/krugdotson/spark-studio ~/spark-studio
+~/spark-studio/install.sh --all
+```
+
+Type your password once at the start (it installs a few Ubuntu packages such as `python3-dev`). After that it runs
+on its own: ComfyUI, PyTorch, the web app and background services, all six model packs (about 200 GB; roughly
+1½–2 hours on a fast connection, with visible progress and automatic resume), and finally a self-test that renders
+one of each thing it can make and prints a timing table. It ends by printing the address to open.
+
 ## Install
 
 Copy this folder to the Spark (for example to `~/spark-studio`), then on the Spark:
@@ -51,9 +65,30 @@ Then open **http://<spark-ip>:7860** from any computer on your network (or http:
 ./spark-studio logs            # app log      (logs comfy = ComfyUI log)
 ./spark-studio models          # see which model packs are downloaded
 ./spark-studio models t2v i2v  # download packs (resumes if interrupted)
+./spark-studio selftest        # render one of each thing it can make and time it (--quick: one image)
 ./spark-studio free            # unload models from memory
 ./spark-studio update          # update ComfyUI and the app's packages
 ```
+
+## Versions
+
+The installer pins what this release was tested with, so a rebuild months later behaves the same:
+ComfyUI **v0.39.2** and PyTorch **2.14.1** (torchvision 0.29.1, torchaudio 2.11.0) for CUDA 13.
+To try newer ones: `COMFY_REF=latest TORCH_PIN=latest ./install.sh` (or a specific tag, e.g. `COMFY_REF=v0.40.0`),
+then run `./spark-studio selftest`.
+
+Tested on a DGX Spark (GB10), Fast mode, `./spark-studio selftest` (each test includes loading its model):
+
+| Test | Time |
+|---|---|
+| Image | 28 s |
+| Edit a photo | 30 s |
+| Video: WAN 2.2, 3 s 480p | 61 s |
+| Video: MiniMax H3, 5 s 480p, with sound | 137 s |
+| Video: LTX 2.3, 5 s 720p, with sound | 87 s |
+| Photo to video: WAN 2.2, 3 s | 67 s |
+| Photo to video: MiniMax H3, 5 s, with sound | 139 s |
+| Photo to video: LTX 2.3, 3 s 480p, with sound | 60 s |
 
 ## Settings
 
@@ -89,6 +124,7 @@ As a rough estimate (not benchmarked) for a 5-second 480p clip: a few minutes on
 ```
 install.sh          installer
 spark-studio        helper commands
+selftest.py         end-to-end test (used by `spark-studio selftest` and `install.sh --all`)
 download_models.py  model downloader (used by `spark-studio models`)
 app/server.py       web backend (talks to ComfyUI's API)
 app/workflows.py    the ComfyUI graphs for each mode
