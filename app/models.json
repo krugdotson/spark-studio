@@ -40,6 +40,15 @@
         {"repo": "lightx2v/Minimax-h3-Turbo", "path": "minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors", "dir": "loras", "gb": 2.0}
       ]
     },
+    "ltx": {
+      "label": "Video with sound (LTX 2.3)",
+      "files": [
+        {"repo": "Lightricks/LTX-2.3-fp8", "path": "ltx-2.3-22b-dev-fp8.safetensors", "dir": "checkpoints", "gb": 29.2},
+        {"repo": "Comfy-Org/ltx-2", "path": "split_files/text_encoders/gemma_3_12B_it_fp4_mixed.safetensors", "dir": "text_encoders", "gb": 9.5},
+        {"repo": "Comfy-Org/ltx-2.3", "path": "split_files/loras/ltx_2.3_22b_distilled_1.1_lora_dynamic_fro09_avg_rank_111_bf16.safetensors", "dir": "loras", "gb": 2.7},
+        {"repo": "Lightricks/LTX-2.3", "path": "ltx-2.3-spatial-upscaler-x2-1.1.safetensors", "dir": "latent_upscale_models", "gb": 1.0}
+      ]
+    },
     "i2v": {
       "label": "Photo-to-video (WAN 2.2 14B)",
       "files": [

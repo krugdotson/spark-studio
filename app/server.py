@@ -12,6 +12,8 @@ import os
 import random
 import re
 import secrets
+import shutil
+import sys
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -37,10 +39,15 @@ PRESETS = json.loads((HERE / "presets.json").read_text())
 STYLES = {m: {s["id"]: s for s in lst} for m, lst in PRESETS["styles"].items()}
 MODES = {m["id"]: m for m in PRESETS["modes"]}
 VIDEO_MODES = ("t2v", "i2v")
+PACKS = json.loads((HERE / "models.json").read_text())["packs"]
+DOWNLOADER = HERE.parent / "download_models.py"
+DL_UNIT = "spark-studio-models"
+DL_LOG = DATA / "model-download.log"
+DL_STATE = DATA / "model-download.json"
 
 
 def status_key(mode, engine="wan"):
-    return f"{mode}:minimax" if engine == "minimax" else mode
+    return f"{mode}:{engine}" if engine != "wan" else mode
 
 jobs: dict[str, dict] = {}
 by_prompt: dict[str, str] = {}
@@ -214,7 +221,7 @@ async def config():
     status = {}
     online = True
     try:
-        have = {f: await comfy_models(f) for f in ("diffusion_models", "text_encoders", "vae", "loras")}
+        have = {f: await comfy_models(f) for f in ("diffusion_models", "text_encoders", "vae", "loras", "checkpoints", "latent_upscale_models")}
         stats = (await http.get(f"{COMFY_URL}/system_stats")).json()
     except Exception:
         online, have, stats = False, {}, {}
@@ -240,6 +247,7 @@ async def config():
         "engines": {
             "wan": {"name": "WAN 2.2", "blurb": "Silent video", "resolutions": list(wf.VIDEO_SIZES), "seconds": [3, 5, 8], "pack": None},
             "minimax": {"name": "MiniMax H3", "blurb": "Video with sound", "resolutions": list(wf.MINIMAX_SIZES), "seconds": [5, 8, 10, 15], "pack": "minimax"},
+            "ltx": {"name": "LTX 2.3", "blurb": "Video with sound, up to 1080p", "resolutions": list(wf.LTX_SIZES), "seconds": [3, 5, 8, 10], "pack": "ltx", "fast_only": True},
         },
     }
 
@@ -306,11 +314,13 @@ async def generate(body: dict):
     fast = bool(body.get("fast", True))
     cfg = await config()
     engine = body.get("engine") if mode in VIDEO_MODES and body.get("engine") in wf.ENGINES else "wan"
+    if engine == "ltx":
+        fast = True  # LTX only has the distilled (fast) path
     st = cfg["status"][status_key(mode, engine)]
     if not cfg["online"]:
         raise HTTPException(503, "ComfyUI isn't running. On the Spark: systemctl --user restart spark-studio-comfy")
     if not st["ready"] or (fast and not st["fast_ready"]):
-        pack = "minimax" if engine == "minimax" else mode
+        pack = engine if engine != "wan" else mode
         raise HTTPException(409, f"Models for this aren't downloaded yet. On the Spark run: ./spark-studio models {pack}")
 
     seed = body.get("seed")
@@ -321,7 +331,7 @@ async def generate(body: dict):
         "count": min(4, max(1, int(body.get("count", 1)))),
         "image": body.get("image"),
         "seconds": min(15, max(5, float(body.get("seconds", 5)))) if engine == "minimax" else min(10, max(1, float(body.get("seconds", 5)))),
-        "resolution": body.get("resolution") if body.get("resolution") in wf.sizes_for(engine) else "480p",
+        "resolution": body.get("resolution") if body.get("resolution") in wf.sizes_for(engine) else ("720p" if engine == "ltx" else "480p"),
         "engine": engine,
     }
     if mode == "edit":  # output follows the photo's shape; aspect is only used for display
@@ -446,6 +456,130 @@ async def get_file(filename: str, subfolder: str = "", type: str = "output", dow
     if download:
         headers["Content-Disposition"] = f'attachment; filename="{filename}"'
     return Response(r.content, media_type=r.headers.get("content-type", "application/octet-stream"), headers=headers)
+
+
+# ------------------------------------------------------------------- model packs
+# Downloads run download_models.py as a transient systemd user unit, so they keep going if the app
+# restarts or the browser closes. Without systemd they fall back to a detached child process.
+dl_proc = None  # fallback child process
+
+
+def pack_target(f):
+    return COMFY_DIR / "models" / f["dir"] / Path(f["path"]).name
+
+
+def dir_bytes(p):
+    total = 0
+    for root, _, files in os.walk(p):
+        for name in files:
+            try:
+                total += os.path.getsize(os.path.join(root, name))
+            except OSError:
+                pass
+    return total
+
+
+def read_dl_state():
+    try:
+        return json.loads(DL_STATE.read_text())
+    except Exception:
+        return {}
+
+
+def last_log_line():
+    try:
+        with open(DL_LOG, "rb") as fh:
+            fh.seek(max(0, fh.seek(0, 2) - 4096))
+            tail = fh.read().decode(errors="replace")
+    except OSError:
+        return ""
+    lines = [ln.strip() for ln in re.split(r"[\r\n]+", tail) if ln.strip() and "HF_TOKEN" not in ln]
+    return lines[-1][:200] if lines else ""
+
+
+async def run_cmd(*args):
+    try:
+        p = await asyncio.create_subprocess_exec(*args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+        out, _ = await p.communicate()
+        return p.returncode, out.decode(errors="replace").strip()
+    except FileNotFoundError:
+        return 127, ""
+
+
+async def download_running():
+    if dl_proc is not None:
+        return dl_proc.returncode is None
+    code, out = await run_cmd("systemctl", "--user", "is-active", DL_UNIT)
+    return out in ("active", "activating")
+
+
+@app.get("/api/models")
+async def models_status():
+    if not COMFY_DIR:
+        raise HTTPException(503, "COMFY_DIR isn't set; re-run ./install.sh")
+    running = await download_running()
+    st = read_dl_state()
+    packs = []
+    for key, p in PACKS.items():
+        have = sum(pack_target(f).exists() for f in p["files"])
+        packs.append({"id": key, "label": p["label"], "gb": round(sum(f["gb"] for f in p["files"]), 1),
+                      "files": len(p["files"]), "have": have, "installed": have == len(p["files"])})
+    dl = None
+    if st.get("pack") in PACKS:
+        files = PACKS[st["pack"]]["files"]
+        total = sum(f["gb"] for f in files) * 1e9
+        done = sum(pack_target(f).stat().st_size for f in files if pack_target(f).exists())
+        installed = all(pack_target(f).exists() for f in files)
+        if running:
+            done += dir_bytes(COMFY_DIR / "models" / ".spark-studio-staging")
+        state = "running" if running else ("done" if installed else ("stopped" if st.get("stopped") else "failed"))
+        dl = {"pack": st["pack"], "state": state, "started": st.get("started"),
+              "done_gb": round(done / 1e9, 1), "total_gb": round(total / 1e9, 1),
+              "progress": 1.0 if installed else min(0.99, done / total) if total else 0,
+              "message": "" if state == "done" else last_log_line()}
+    return {"packs": packs, "download": dl, "free_gb": round(shutil.disk_usage(COMFY_DIR / "models").free / 1e9)}
+
+
+@app.post("/api/models/download")
+async def models_download(body: dict):
+    global dl_proc
+    pack = body.get("pack")
+    if pack not in PACKS:
+        raise HTTPException(400, "Unknown model pack.")
+    if not COMFY_DIR:
+        raise HTTPException(503, "COMFY_DIR isn't set; re-run ./install.sh")
+    if await download_running():
+        raise HTTPException(409, "A download is already running. Wait for it to finish or stop it first.")
+    if all(pack_target(f).exists() for f in PACKS[pack]["files"]):
+        raise HTTPException(409, "That pack is already downloaded.")
+    DL_STATE.write_text(json.dumps({"pack": pack, "started": time.time()}))
+    cmd = [sys.executable, "-u", str(DOWNLOADER), pack, "-y", "--comfy-dir", str(COMFY_DIR)]
+    await run_cmd("systemctl", "--user", "reset-failed", DL_UNIT)
+    code, out = await run_cmd("systemd-run", "--user", "--quiet", "--collect", f"--unit={DL_UNIT}",
+                              f"--property=StandardOutput=truncate:{DL_LOG}", f"--property=StandardError=append:{DL_LOG}",
+                              *cmd)
+    if code == 0:
+        dl_proc = None
+    else:  # no systemd user session: run it as a detached child instead
+        log = open(DL_LOG, "wb")
+        dl_proc = await asyncio.create_subprocess_exec(*cmd, stdout=log, stderr=log, start_new_session=True)
+        log.close()
+    return await models_status()
+
+
+@app.post("/api/models/cancel")
+async def models_cancel():
+    if not await download_running():
+        return await models_status()
+    st = read_dl_state()
+    st["stopped"] = True
+    DL_STATE.write_text(json.dumps(st))
+    if dl_proc is not None:
+        dl_proc.terminate()
+        await dl_proc.wait()
+    else:
+        await run_cmd("systemctl", "--user", "stop", DL_UNIT)
+    return await models_status()
 
 
 @app.get("/api/health")

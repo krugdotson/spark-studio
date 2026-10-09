@@ -5,3 +5,4 @@ comfy-venv/
 app-venv/
 __pycache__/
 *.pyc
+*.log

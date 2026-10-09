@@ -37,6 +37,9 @@ command -v git >/dev/null || die "git is missing. Run: sudo apt install -y git"
 command -v python3 >/dev/null || die "python3 is missing. Run: sudo apt install -y python3 python3-venv python3-pip"
 python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' || die "Python 3.10 or newer is needed (found $(python3 --version))."
 python3 -c 'import ensurepip, venv' 2>/dev/null || die "Python venv support is missing. Run: sudo apt install -y python3-venv"
+# PyTorch's Triton compiles a small GPU helper at first use and needs Python.h
+python3 -c 'import os, sys, sysconfig; sys.exit(0 if os.path.exists(os.path.join(sysconfig.get_paths()["include"], "Python.h")) else 1)' \
+  || die "Python developer files are missing. Run: sudo apt install -y python3-dev"
 info "Python: $(python3 --version | cut -d' ' -f2)"
 
 cuda_ok() {  # $1 = python; true if PyTorch there can use the GPU
