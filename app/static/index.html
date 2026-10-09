@@ -1,0 +1,638 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spark Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --lightbox: #eef1ec;
+  --lightbox-2: #e3e8e2;
+  --frame: #ffffff;
+  --ink: #1d2433;
+  --graphite: #5b6474;
+  --rule: #cfd6cf;
+  --cobalt: #2b45d6;
+  --cobalt-ink: #ffffff;
+  --cobalt-soft: #dfe4fb;
+  --warn: #9a4a00;
+  --warn-soft: #fbead6;
+  --bad: #b3261e;
+  --ok: #1f7a4d;
+  --radius-lg: 14px;
+  --radius-sm: 8px;
+  --font: "Schibsted Grotesk", ui-sans-serif, system-ui, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --lightbox: #171b22; --lightbox-2: #1e232c; --frame: #232935; --ink: #e8ebf0; --graphite: #9aa3b2;
+    --rule: #323a47; --cobalt: #7c90ff; --cobalt-ink: #0d1020; --cobalt-soft: #262e52;
+    --warn: #f0b36a; --warn-soft: #3a2b18; --bad: #ff8a80; --ok: #6fd3a0; color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--lightbox); color: var(--ink); font-family: var(--font);
+  font-size: 16px; line-height: 1.5; -webkit-font-smoothing: antialiased;
+}
+button, input, textarea, select { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--cobalt); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* ---------- top bar ---------- */
+.bar {
+  display: flex; align-items: center; gap: 16px; padding: 14px 24px;
+  border-bottom: 1px solid var(--rule);
+}
+.brand { font-weight: 800; font-size: 20px; letter-spacing: -0.02em; display: flex; align-items: center; gap: 10px; }
+.brand svg { width: 26px; height: 26px; }
+.machine { margin-left: auto; color: var(--graphite); font-size: 14px; display: flex; align-items: center; gap: 8px; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--graphite); }
+.dot.on { background: var(--ok); }
+.dot.off { background: var(--bad); }
+
+/* ---------- layout ---------- */
+.shell { display: grid; grid-template-columns: minmax(360px, 460px) 1fr; height: calc(100vh - 57px); }
+.wizard { padding: 28px 24px 40px; border-right: 1px solid var(--rule); overflow-y: auto; }
+.table { padding: 28px 28px 60px; background: var(--lightbox-2); overflow-y: auto; }
+@media (max-width: 900px) {
+  .shell { grid-template-columns: 1fr; height: auto; }
+  .wizard, .table { overflow: visible; }
+  .wizard { border-right: 0; border-bottom: 1px solid var(--rule); padding: 20px 16px 28px; }
+  .table { padding: 20px 16px 48px; }
+  .bar { padding: 12px 16px; }
+}
+
+/* ---------- steps ---------- */
+.step { margin-bottom: 30px; }
+.step-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; }
+.step-num {
+  flex: none; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+  font-weight: 700; font-size: 15px; border: 2px solid var(--ink); transform: translateY(5px);
+}
+.step.done .step-num { background: var(--ink); color: var(--lightbox); }
+.step.locked { opacity: .45; pointer-events: none; }
+.step h2 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.015em; }
+.step-body { margin-left: 42px; }
+@media (max-width: 900px) { .step-body { margin-left: 0; } }
+
+.modes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.mode {
+  text-align: left; background: var(--frame); border: 2px solid transparent; border-radius: var(--radius-lg);
+  padding: 14px; cursor: pointer; display: grid; gap: 6px; box-shadow: 0 1px 0 var(--rule);
+}
+.mode:hover { border-color: var(--rule); }
+.mode[aria-pressed="true"] { border-color: var(--cobalt); }
+.mode svg { width: 30px; height: 30px; color: var(--cobalt); }
+.mode b { font-size: 16px; }
+.mode span { font-size: 13.5px; color: var(--graphite); line-height: 1.35; }
+.mode .need { font-size: 12.5px; color: var(--warn); }
+
+.styles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+@media (max-width: 420px) { .styles { grid-template-columns: repeat(2, 1fr); } }
+.style {
+  text-align: left; background: var(--frame); border: 2px solid transparent; border-radius: var(--radius-sm);
+  padding: 0; cursor: pointer; overflow: hidden; display: grid;
+}
+.style[aria-pressed="true"] { border-color: var(--cobalt); }
+.swatch { height: 8px; }
+.style b { font-size: 14px; padding: 7px 9px 0; line-height: 1.25; }
+.style span { font-size: 12px; color: var(--graphite); padding: 2px 9px 8px; line-height: 1.3; }
+
+label.field { display: block; font-weight: 600; font-size: 14px; margin: 14px 0 6px; }
+textarea {
+  width: 100%; min-height: 108px; resize: vertical; border: 1.5px solid var(--rule); background: var(--frame);
+  border-radius: var(--radius-sm); padding: 12px; line-height: 1.45;
+}
+textarea:focus { border-color: var(--cobalt); outline: none; }
+.full-prompt { font-size: 13px; color: var(--graphite); margin-top: 6px; }
+
+.drop {
+  border: 2px dashed var(--rule); border-radius: var(--radius-sm); background: var(--frame);
+  padding: 14px; display: flex; align-items: center; gap: 14px; cursor: pointer; min-height: 88px;
+}
+.drop.over { border-color: var(--cobalt); background: var(--cobalt-soft); }
+.drop img { width: 72px; height: 72px; object-fit: cover; border-radius: 6px; }
+.drop p { margin: 0; font-size: 14px; color: var(--graphite); }
+.drop p b { color: var(--ink); }
+
+.opts { display: flex; flex-wrap: wrap; gap: 14px 18px; margin-top: 4px; }
+.opt { display: grid; gap: 6px; }
+.opt > span { font-weight: 600; font-size: 14px; }
+.seg { display: inline-flex; background: var(--frame); border: 1.5px solid var(--rule); border-radius: 999px; padding: 2px; }
+.seg button {
+  border: 0; background: none; padding: 5px 11px; border-radius: 999px; cursor: pointer; font-size: 13.5px;
+}
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--lightbox); }
+.seg button:disabled { opacity: .4; cursor: not-allowed; }
+
+details.more { margin-top: 14px; font-size: 14px; }
+details.more summary { cursor: pointer; color: var(--graphite); }
+details.more input {
+  margin-top: 8px; width: 100%; border: 1.5px solid var(--rule); background: var(--frame);
+  border-radius: var(--radius-sm); padding: 8px 10px;
+}
+
+.go {
+  margin-top: 22px; width: 100%; border: 0; border-radius: var(--radius-lg); background: var(--cobalt); color: var(--cobalt-ink);
+  font-weight: 700; font-size: 18px; padding: 15px; cursor: pointer; letter-spacing: -0.01em;
+}
+.go:disabled { opacity: .5; cursor: not-allowed; }
+.hint { font-size: 13.5px; color: var(--graphite); margin: 8px 0 0; }
+.notice {
+  background: var(--warn-soft); color: var(--warn); border-radius: var(--radius-sm); padding: 10px 12px;
+  font-size: 14px; margin-top: 12px;
+}
+.notice code { font-size: 13px; background: rgba(0,0,0,.06); padding: 1px 5px; border-radius: 4px; }
+.error { color: var(--bad); font-size: 14px; margin-top: 10px; }
+
+/* ---------- light table ---------- */
+.table-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+.table-head h2 { margin: 0; font-size: 22px; letter-spacing: -0.015em; }
+.table-head p { margin: 0; color: var(--graphite); font-size: 14px; }
+.sheet { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 18px; align-items: start; }
+.frame {
+  background: var(--frame); border-radius: 4px; padding: 10px 10px 12px; display: grid; gap: 8px;
+  box-shadow: 0 1px 0 var(--rule), 0 6px 18px -12px rgba(29, 36, 51, .35);
+}
+.frame-media {
+  position: relative; aspect-ratio: var(--ar, 1); background: var(--lightbox-2); border-radius: 2px; overflow: hidden;
+  border: 0; padding: 0; cursor: zoom-in; display: block; width: 100%;
+}
+.frame-media img, .frame-media video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.frame-media .badge {
+  position: absolute; left: 8px; top: 8px; background: rgba(15, 18, 26, .72); color: #fff; font-size: 12px;
+  padding: 2px 8px; border-radius: 999px;
+}
+.frame-meta { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; color: var(--graphite); }
+.frame-meta b { color: var(--ink); font-weight: 600; }
+.frame-prompt {
+  font-size: 13.5px; line-height: 1.35; margin: 0; display: -webkit-box; -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical; overflow: hidden;
+}
+.pending { display: grid; place-items: center; text-align: center; padding: 16px; cursor: default; }
+.pending .phase { font-weight: 600; font-size: 14.5px; }
+.pending .elapsed { font-size: 13px; color: var(--graphite); }
+.meter { width: 80%; height: 6px; background: var(--rule); border-radius: 99px; overflow: hidden; margin: 10px auto 6px; }
+.meter i { display: block; height: 100%; background: var(--cobalt); width: 0; transition: width .4s ease; }
+.meter.indet i { width: 30%; animation: slide 1.4s ease-in-out infinite; }
+@keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+.linkbtn { background: none; border: 0; color: var(--cobalt); cursor: pointer; padding: 0; font-size: 13.5px; font-weight: 600; }
+.failed { color: var(--bad); font-size: 13.5px; padding: 14px; text-align: left; cursor: default; overflow: auto; }
+
+.empty {
+  border: 2px dashed var(--rule); border-radius: var(--radius-lg); padding: 40px 24px; text-align: center; color: var(--graphite);
+}
+.empty b { color: var(--ink); display: block; font-size: 17px; margin-bottom: 4px; }
+
+/* ---------- viewer ---------- */
+dialog {
+  border: 0; padding: 0; border-radius: var(--radius-lg); background: var(--frame); color: var(--ink);
+  width: min(1100px, calc(100vw - 32px)); max-height: calc(100vh - 32px);
+}
+dialog::backdrop { background: rgba(10, 12, 18, .7); }
+.viewer { display: grid; grid-template-columns: 1fr 300px; max-height: calc(100vh - 32px); }
+.viewer-media { background: #0f121a; display: grid; place-items: center; min-height: 300px; }
+.viewer-media img, .viewer-media video { max-width: 100%; max-height: calc(100vh - 32px); display: block; }
+.viewer-side { padding: 20px; overflow: auto; display: flex; flex-direction: column; gap: 14px; }
+.viewer-side h3 { margin: 0; font-size: 18px; padding-right: 36px; }
+.viewer-side p { margin: 0; font-size: 14px; line-height: 1.45; }
+.facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 13.5px; }
+.facts dt { color: var(--graphite); }
+.facts dd { margin: 0; }
+.actions { display: grid; gap: 8px; margin-top: auto; }
+.btn {
+  border: 1.5px solid var(--rule); background: var(--frame); border-radius: var(--radius-sm); padding: 9px 12px;
+  cursor: pointer; font-weight: 600; font-size: 14px; text-align: center; text-decoration: none; color: var(--ink);
+}
+.btn.primary { background: var(--cobalt); color: var(--cobalt-ink); border-color: var(--cobalt); }
+.btn.danger { color: var(--bad); }
+.close { position: absolute; right: 10px; top: 10px; z-index: 2; background: rgba(15,18,26,.7); color: #fff; border: 0; border-radius: 99px; width: 34px; height: 34px; cursor: pointer; font-size: 18px; }
+@media (max-width: 800px) {
+  .viewer { grid-template-columns: 1fr; overflow: auto; }
+  .viewer-media img, .viewer-media video { max-height: 60vh; }
+}
+.toast {
+  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: var(--lightbox);
+  padding: 10px 16px; border-radius: 999px; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .2s;
+}
+.toast.show { opacity: 1; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="brand">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="7" width="26" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M14 3l-3 8h5l-3 8" fill="none" stroke="var(--cobalt)" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" transform="translate(3 5)"/></svg>
+    Spark Studio
+  </div>
+  <div class="machine" id="machine"><span class="dot" id="dot"></span><span id="machineText">Connecting…</span></div>
+</header>
+
+<main class="shell">
+  <section class="wizard" aria-label="Create">
+    <div class="step" id="step1">
+      <div class="step-head"><span class="step-num">1</span><h2>What are you making?</h2></div>
+      <div class="step-body"><div class="modes" id="modes"></div></div>
+    </div>
+
+    <div class="step locked" id="step2">
+      <div class="step-head"><span class="step-num">2</span><h2>Pick a style</h2></div>
+      <div class="step-body"><div class="styles" id="styles"></div></div>
+    </div>
+
+    <div class="step locked" id="step3">
+      <div class="step-head"><span class="step-num">3</span><h2 id="step3Title">Describe it</h2></div>
+      <div class="step-body">
+        <div id="dropWrap" hidden>
+          <label class="field" for="fileInput">Your photo</label>
+          <div class="drop" id="drop" tabindex="0" role="button" aria-label="Add a photo">
+            <img id="dropImg" alt="" hidden>
+            <p id="dropText"><b>Drop a photo here</b><br>or click to choose one</p>
+          </div>
+          <input type="file" id="fileInput" accept="image/*" class="sr">
+        </div>
+        <label class="field" for="prompt" id="promptLabel">Prompt</label>
+        <textarea id="prompt" placeholder="A lighthouse on a rocky cliff during a storm, waves crashing"></textarea>
+        <div class="full-prompt" id="fullPrompt"></div>
+
+        <div class="opts" id="opts"></div>
+
+        <details class="more">
+          <summary>More settings</summary>
+          <label class="field" for="seed">Seed (leave blank for a new result each time)</label>
+          <input id="seed" inputmode="numeric" placeholder="Random">
+        </details>
+
+        <button class="go" id="go" disabled>Generate</button>
+        <p class="hint" id="goHint"></p>
+        <div id="notice"></div>
+        <div class="error" id="err" role="alert"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="table" aria-label="Your work">
+    <div class="table-head"><h2>Your work</h2><p id="count"></p></div>
+    <div class="sheet" id="sheet"></div>
+  </section>
+</main>
+
+<dialog id="viewer"></dialog>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const ICONS = {
+  image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg>',
+  edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="13" height="16" rx="2"/><path d="M14 15l6.5-6.5a1.8 1.8 0 0 0-2.5-2.5L11.5 12.5 11 15z"/></svg>',
+  t2v: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2.5" y="5" width="14" height="14" rx="2"/><path d="M16.5 10l5-3v10l-5-3"/><path d="M6 10h7M6 14h5"/></svg>',
+  i2v: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2.5" y="5" width="14" height="14" rx="2"/><path d="M16.5 10l5-3v10l-5-3"/><path d="M8 9.5v5l4-2.5z" fill="currentColor"/></svg>',
+};
+const MODE_NOUN = { image: "Image", edit: "Edit", t2v: "Video", i2v: "Video" };
+const VIDEO = (m) => m === "t2v" || m === "i2v";
+
+let CFG = null;
+const S = { mode: null, style: null, image: null, aspect: null, fast: true, seconds: 5, resolution: "480p", count: 1 };
+let JOBS = [];
+let pollTimer = null;
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, opts);
+  const isJson = (r.headers.get("content-type") || "").includes("json");
+  const data = isJson ? await r.json() : await r.text();
+  if (!r.ok) throw new Error((data && data.detail) || r.statusText);
+  return data;
+}
+function toast(msg) {
+  const t = $("#toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 2600);
+}
+
+/* ---------------- config / machine status ---------------- */
+async function loadConfig() {
+  try {
+    CFG = await api("/api/config");
+  } catch (e) {
+    CFG = CFG || null;
+  }
+  const dot = $("#dot"), txt = $("#machineText");
+  if (!CFG || !CFG.online) {
+    dot.className = "dot off"; txt.textContent = "ComfyUI is offline";
+  } else {
+    dot.className = "dot on";
+    txt.textContent = CFG.gpu ? CFG.gpu.replace(/^cuda:\d+\s*/, "").replace(/\s*:\s*cudaMallocAsync$/, "") : "Ready";
+  }
+  if (CFG) { renderModes(); if (S.mode) { renderOpts(); renderNotice(); } }
+}
+
+/* ---------------- step 1 ---------------- */
+function renderModes() {
+  $("#modes").innerHTML = CFG.modes.map((m) => {
+    const st = CFG.status[m.id];
+    const need = CFG.online && !st.ready ? '<span class="need">Models not downloaded yet</span>' : "";
+    return `<button class="mode" data-mode="${m.id}" aria-pressed="${S.mode === m.id}">
+      ${ICONS[m.id] || ""}<b>${esc(m.name)}</b><span>${esc(m.blurb)}</span>${need}</button>`;
+  }).join("");
+  $("#modes").querySelectorAll(".mode").forEach((b) => b.onclick = () => pickMode(b.dataset.mode));
+}
+function pickMode(mode, keepStyle) {
+  const changed = S.mode !== mode;
+  S.mode = mode;
+  if (changed && !keepStyle) { S.style = null; S.aspect = null; }
+  if (changed && !(MODES_NEED_IMAGE(mode))) S.image = null;
+  $("#step1").classList.add("done");
+  $("#step2").classList.remove("locked");
+  renderModes(); renderStyles();
+  if (!S.style) pickStyle(CFG.styles[mode][0].id, true); else renderStep3();
+}
+const MODES_NEED_IMAGE = (m) => !!(CFG.modes.find((x) => x.id === m) || {}).needs_image;
+
+/* ---------------- step 2 ---------------- */
+function renderStyles() {
+  $("#styles").innerHTML = CFG.styles[S.mode].map((s) => `
+    <button class="style" data-style="${s.id}" aria-pressed="${S.style === s.id}">
+      <i class="swatch" style="background:linear-gradient(135deg,hsl(${s.hue} 62% 52%),hsl(${(s.hue + 38) % 360} 58% 38%))"></i>
+      <b>${esc(s.name)}</b><span>${esc(s.blurb)}</span></button>`).join("");
+  $("#styles").querySelectorAll(".style").forEach((b) => b.onclick = () => pickStyle(b.dataset.style));
+}
+function pickStyle(id, auto) {
+  S.style = id;
+  const st = currentStyle();
+  if (st.aspect) S.aspect = st.aspect;
+  if (!auto) $("#step2").classList.add("done");
+  $("#step3").classList.remove("locked");
+  renderStyles(); renderStep3();
+}
+const currentStyle = () => CFG.styles[S.mode].find((s) => s.id === S.style);
+
+/* ---------------- step 3 ---------------- */
+function renderStep3() {
+  const needsImg = MODES_NEED_IMAGE(S.mode);
+  $("#dropWrap").hidden = !needsImg;
+  $("#step3Title").textContent = needsImg ? (S.mode === "edit" ? "Add a photo and say what to change" : "Add a photo and describe the motion") : "Describe it";
+  const st = currentStyle();
+  const optional = (st.placeholder || "").startsWith("(optional)");
+  $("#promptLabel").textContent = S.mode === "edit" ? (st.id === "free" ? "What should change?" : st.name)
+    : S.mode === "i2v" ? "What happens?" : "Prompt";
+  $("#prompt").placeholder = st.placeholder || (VIDEO(S.mode)
+    ? "A red fox trots through fresh snow in a quiet pine forest at dawn"
+    : "A lighthouse on a rocky cliff during a storm, waves crashing");
+  if (optional) $("#promptLabel").textContent += " (optional)";
+  renderDrop(); renderOpts(); updatePreview(); renderNotice();
+}
+function updatePreview() {
+  const st = currentStyle(); if (!st) return;
+  const p = $("#prompt").value.trim();
+  $("#fullPrompt").textContent = st.template === "{prompt}" || !p ? "" :
+    "Sent as: " + st.template.replace("{prompt}", p);
+  const optional = (st.placeholder || "").startsWith("(optional)");
+  const ready = CFG.online && CFG.status[S.mode].ready && (!S.fast || CFG.status[S.mode].fast_ready);
+  const hasImg = !MODES_NEED_IMAGE(S.mode) || S.image;
+  $("#go").disabled = !(ready && hasImg && (p || optional));
+  $("#go").textContent = `Generate ${MODE_NOUN[S.mode].toLowerCase()}`;
+  $("#goHint").textContent = !hasImg ? "Add a photo to continue." :
+    (!p && !optional) ? "" : estimate();
+}
+function estimate() {
+  if (VIDEO(S.mode)) {
+    const base = S.fast ? 3 : 18;
+    const f = (S.seconds / 5) * (S.resolution === "720p" ? 2.4 : 1);
+    const lo = Math.max(1, Math.round(base * f * 0.6)), hi = Math.round(base * f * 1.4);
+    return `Takes roughly ${lo}–${hi} minutes on a Spark. First run is slower while models load.`;
+  }
+  return S.fast ? "Usually under a minute. First run is slower while models load." :
+    "Takes a few minutes in Best mode. First run is slower while models load.";
+}
+function seg(name, values, current, labels, disabled = {}) {
+  return `<div class="seg" role="group" aria-label="${name}">${values.map((v, i) =>
+    `<button type="button" data-k="${name}" data-v="${v}" aria-pressed="${String(current) === String(v)}" ${disabled[v] ? "disabled title='" + esc(disabled[v]) + "'" : ""}>${labels ? labels[i] : v}</button>`).join("")}</div>`;
+}
+function renderOpts() {
+  if (!S.mode) return;
+  const st = CFG.status[S.mode];
+  const fastDisabled = st.ready && !st.fast_ready ? { true: "Fast mode model not downloaded" } : {};
+  if (fastDisabled.true) S.fast = false;
+  let h = `<div class="opt"><span>Speed</span>${seg("fast", [true, false], S.fast, ["Fast", "Best"], fastDisabled)}</div>`;
+  if (S.mode === "image" || S.mode === "t2v") {
+    const aspects = S.mode === "image" ? CFG.image_aspects : CFG.video_aspects;
+    if (!aspects.includes(S.aspect)) S.aspect = S.mode === "image" ? "1:1" : "16:9";
+    h += `<div class="opt"><span>Shape</span>${seg("aspect", aspects, S.aspect)}</div>`;
+  }
+  if (S.mode === "image") h += `<div class="opt"><span>How many</span>${seg("count", [1, 2, 4], S.count)}</div>`;
+  if (VIDEO(S.mode)) {
+    h += `<div class="opt"><span>Length</span>${seg("seconds", [3, 5, 8], S.seconds, ["3 s", "5 s", "8 s"])}</div>`;
+    h += `<div class="opt"><span>Quality</span>${seg("resolution", ["480p", "720p"], S.resolution)}</div>`;
+  }
+  $("#opts").innerHTML = h;
+  $("#opts").querySelectorAll("button").forEach((b) => b.onclick = () => {
+    let v = b.dataset.v;
+    if (b.dataset.k === "fast") v = v === "true";
+    else if (b.dataset.k === "count" || b.dataset.k === "seconds") v = Number(v);
+    S[b.dataset.k] = v; renderOpts(); updatePreview();
+  });
+}
+function renderNotice() {
+  const st = CFG.status[S.mode];
+  let n = "";
+  if (!CFG.online) n = "ComfyUI isn't running on the Spark. Start it with <code>systemctl --user restart spark-studio-comfy</code>.";
+  else if (!st.ready || (S.fast && !st.fast_ready)) n = `The models for this aren't downloaded yet. On the Spark, run <code>./spark-studio models ${S.mode}</code> in the Spark Studio folder, then refresh this page.`;
+  $("#notice").innerHTML = n ? `<div class="notice">${n}</div>` : "";
+}
+
+/* ---------------- photo upload ---------------- */
+function renderDrop() {
+  const img = $("#dropImg");
+  if (S.image) {
+    img.src = `/api/file?type=input&filename=${encodeURIComponent(S.image.name.split("/").pop())}&subfolder=${encodeURIComponent(S.image.name.includes("/") ? S.image.name.split("/").slice(0, -1).join("/") : "")}`;
+    img.hidden = false;
+    $("#dropText").innerHTML = `<b>Photo added</b> · ${S.image.width}×${S.image.height}<br>Click or drop to replace it`;
+  } else {
+    img.hidden = true;
+    $("#dropText").innerHTML = "<b>Drop a photo here</b><br>or click to choose one";
+  }
+}
+async function uploadFile(file) {
+  if (!file) return;
+  $("#err").textContent = "";
+  $("#dropText").innerHTML = "<b>Uploading…</b>";
+  const fd = new FormData(); fd.append("file", file);
+  try { S.image = await api("/api/upload", { method: "POST", body: fd }); }
+  catch (e) { $("#err").textContent = e.message; }
+  renderDrop(); updatePreview();
+}
+const drop = $("#drop");
+drop.onclick = () => $("#fileInput").click();
+drop.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("#fileInput").click(); } };
+$("#fileInput").onchange = (e) => uploadFile(e.target.files[0]);
+["dragenter", "dragover"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", (e) => uploadFile(e.dataTransfer.files[0]));
+document.addEventListener("paste", (e) => {
+  if (!S.mode || !MODES_NEED_IMAGE(S.mode)) return;
+  const f = [...(e.clipboardData?.files || [])].find((x) => x.type.startsWith("image/"));
+  if (f) uploadFile(f);
+});
+$("#prompt").addEventListener("input", updatePreview);
+$("#prompt").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !$("#go").disabled) generate(); });
+
+/* ---------------- generate ---------------- */
+$("#go").onclick = generate;
+async function generate() {
+  $("#err").textContent = "";
+  $("#go").disabled = true;
+  try {
+    const job = await api("/api/generate", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mode: S.mode, style: S.style, prompt: $("#prompt").value, image: S.image?.name,
+        aspect: S.aspect, fast: S.fast, seconds: S.seconds, resolution: S.resolution, count: S.count,
+        seed: $("#seed").value.trim() || null,
+      }),
+    });
+    JOBS.unshift(job); renderSheet(); schedulePoll(800);
+    toast("Added to the queue");
+  } catch (e) {
+    $("#err").textContent = e.message;
+  }
+  updatePreview();
+}
+
+/* ---------------- light table ---------------- */
+const ACTIVE = (j) => ["queued", "running", "checking"].includes(j.status);
+function arFor(j) {
+  const [a, b] = (j.aspect || "1:1").split(":").map(Number);
+  return a && b ? a / b : 1;
+}
+function fileUrl(o, dl) {
+  return `/api/file?filename=${encodeURIComponent(o.filename)}&subfolder=${encodeURIComponent(o.subfolder || "")}${dl ? "&download=1" : ""}`;
+}
+function fmtTime(sec) {
+  sec = Math.max(0, Math.round(sec));
+  return sec < 60 ? `${sec}s` : `${Math.floor(sec / 60)}m ${String(sec % 60).padStart(2, "0")}s`;
+}
+function renderSheet() {
+  const sheet = $("#sheet");
+  const done = JOBS.filter((j) => j.status === "done").length;
+  $("#count").textContent = JOBS.length ? `${done} finished${JOBS.some(ACTIVE) ? `, ${JOBS.filter(ACTIVE).length} in progress` : ""}` : "";
+  if (!JOBS.length) {
+    sheet.innerHTML = `<div class="empty" style="grid-column:1/-1"><b>Nothing here yet</b>Pick what you're making on the left. Everything you generate lands here and stays on the Spark.</div>`;
+    return;
+  }
+  const frames = [];
+  for (const j of JOBS) {
+    const meta = `<div class="frame-meta"><b>${esc(j.style_name)}</b><span>${new Date(j.created * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span></div>
+      <p class="frame-prompt" title="${esc(j.prompt)}">${esc(j.user_prompt || j.prompt)}</p>`;
+    if (ACTIVE(j)) {
+      const indet = j.status !== "running" || !j.progress;
+      const el = j.started ? Date.now() / 1000 - j.started : 0;
+      frames.push(`<div class="frame" data-id="${j.id}"><div class="frame-media pending" style="--ar:${arFor(j)}">
+        <div><div class="phase">${esc(j.phase || "Waiting in line")}</div>
+        <div class="meter ${indet ? "indet" : ""}"><i style="width:${Math.round((j.progress || 0) * 100)}%"></i></div>
+        <div class="elapsed">${j.status === "running" ? fmtTime(el) + (j.progress ? ` · ${Math.round(j.progress * 100)}%` : "") : "&nbsp;"}</div>
+        <button class="linkbtn" data-cancel="${j.id}">Cancel</button></div></div>${meta}</div>`);
+    } else if (j.status === "done") {
+      (j.outputs || []).forEach((o, i) => {
+        const media = o.kind === "video"
+          ? `<video src="${fileUrl(o)}#t=0.1" muted loop playsinline preload="metadata"></video><span class="badge">${j.seconds ? j.seconds + " s" : "Video"}</span>`
+          : `<img src="${fileUrl(o)}" alt="${esc(j.user_prompt)}" loading="lazy">`;
+        frames.push(`<div class="frame"><button class="frame-media" style="--ar:${arFor(j)}" data-open="${j.id}" data-i="${i}" aria-label="Open">${media}</button>${meta}</div>`);
+      });
+    } else {
+      frames.push(`<div class="frame"><div class="frame-media failed" style="--ar:${arFor(j)}">
+        <div><b>${j.status === "cancelled" ? "Cancelled" : "Didn't finish"}</b><br>${esc(j.status === "cancelled" ? "" : j.error)}<br><br>
+        <button class="linkbtn" data-retry="${j.id}">Try again</button> &nbsp; <button class="linkbtn" data-del="${j.id}">Remove</button></div></div>${meta}</div>`);
+    }
+  }
+  sheet.innerHTML = frames.join("");
+  sheet.querySelectorAll("[data-cancel]").forEach((b) => b.onclick = () => cancelJob(b.dataset.cancel));
+  sheet.querySelectorAll("[data-open]").forEach((b) => b.onclick = () => openViewer(b.dataset.open, +b.dataset.i));
+  sheet.querySelectorAll("[data-del]").forEach((b) => b.onclick = () => deleteJob(b.dataset.del));
+  sheet.querySelectorAll("[data-retry]").forEach((b) => b.onclick = () => reuse(JOBS.find((j) => j.id === b.dataset.retry)));
+  sheet.querySelectorAll("video").forEach((v) => {
+    v.parentElement.addEventListener("mouseenter", () => v.play().catch(() => {}));
+    v.parentElement.addEventListener("mouseleave", () => v.pause());
+  });
+}
+async function poll() {
+  try {
+    const d = await api("/api/jobs");
+    const wasActive = new Set(JOBS.filter(ACTIVE).map((j) => j.id));
+    JOBS = d.jobs;
+    for (const j of JOBS) if (wasActive.has(j.id) && j.status === "done") toast(`${MODE_NOUN[j.mode]} ready`);
+    renderSheet();
+  } catch (e) { /* server restarting; try again */ }
+  schedulePoll(JOBS.some(ACTIVE) ? 1500 : 10000);
+}
+function schedulePoll(ms) { clearTimeout(pollTimer); pollTimer = setTimeout(poll, ms); }
+async function cancelJob(id) { try { await api(`/api/jobs/${id}/cancel`, { method: "POST" }); } catch (e) { toast(e.message); } schedulePoll(300); }
+async function deleteJob(id) {
+  await api(`/api/jobs/${id}`, { method: "DELETE" });
+  JOBS = JOBS.filter((j) => j.id !== id); renderSheet();
+}
+
+/* ---------------- viewer ---------------- */
+function openViewer(id, i) {
+  const j = JOBS.find((x) => x.id === id); const o = j.outputs[i];
+  const isImg = o.kind === "image";
+  const d = $("#viewer");
+  d.innerHTML = `<button class="close" aria-label="Close">×</button><div class="viewer">
+    <div class="viewer-media">${isImg ? `<img src="${fileUrl(o)}" alt="">` : `<video src="${fileUrl(o)}" controls autoplay loop playsinline></video>`}</div>
+    <div class="viewer-side">
+      <h3>${esc(j.style_name)}</h3>
+      <p>${esc(j.user_prompt || "(no prompt)")}</p>
+      <dl class="facts">
+        <dt>Made</dt><dd>${new Date(j.created * 1000).toLocaleString()}</dd>
+        ${j.finished && j.started ? `<dt>Took</dt><dd>${fmtTime(j.finished - j.started)}</dd>` : ""}
+        <dt>Mode</dt><dd>${j.fast ? "Fast" : "Best"}${j.resolution ? ", " + j.resolution : ""}</dd>
+        <dt>Seed</dt><dd>${j.seed}</dd>
+      </dl>
+      <details><summary style="cursor:pointer;font-size:13.5px;color:var(--graphite)">Full prompt sent</summary><p style="font-size:13px;margin-top:6px">${esc(j.prompt)}</p></details>
+      <div class="actions">
+        <a class="btn primary" href="${fileUrl(o, 1)}" download>Download</a>
+        ${isImg ? `<button class="btn" data-act="edit">Edit this image</button><button class="btn" data-act="i2v">Animate this image</button>` : ""}
+        <button class="btn" data-act="again">Use these settings again</button>
+        <button class="btn danger" data-act="del">Remove from history</button>
+      </div>
+    </div></div>`;
+  d.querySelector(".close").onclick = () => d.close();
+  d.querySelectorAll("[data-act]").forEach((b) => b.onclick = async () => {
+    const act = b.dataset.act;
+    if (act === "del") { d.close(); return deleteJob(j.id); }
+    if (act === "again") { d.close(); return reuse(j); }
+    b.disabled = true;
+    try {
+      const img = await api("/api/reuse", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(o) });
+      d.close();
+      S.image = img; pickMode(act); $("#prompt").value = ""; renderStep3();
+      $("#prompt").focus(); toast(act === "edit" ? "Ready to edit. Say what to change." : "Ready to animate. Describe the motion.");
+    } catch (e) { toast(e.message); b.disabled = false; }
+  });
+  d.addEventListener("close", () => { d.innerHTML = ""; }, { once: true });
+  d.showModal();
+}
+$("#viewer").addEventListener("click", (e) => { if (e.target.id === "viewer") e.target.close(); });
+
+function reuse(j) {
+  S.style = null; pickMode(j.mode, true);
+  S.style = j.style; pickStyle(j.style);
+  if (j.aspect) S.aspect = j.aspect;
+  S.fast = j.fast; if (j.seconds) S.seconds = j.seconds; if (j.resolution) S.resolution = j.resolution;
+  if (j.image) S.image = { name: j.image, width: "?", height: "?" };
+  $("#prompt").value = j.user_prompt || "";
+  renderStep3(); $("#prompt").focus();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+loadConfig().then(poll);
+setInterval(loadConfig, 30000);
+renderSheet();
+</script>
+</body>
+</html>

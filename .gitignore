@@ -1,0 +1,7 @@
+config.env
+data/
+ComfyUI/
+comfy-venv/
+app-venv/
+__pycache__/
+*.pyc

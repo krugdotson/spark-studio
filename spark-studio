@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Spark Studio helper.
+#   ./spark-studio status            is everything running?
+#   ./spark-studio restart|stop|start
+#   ./spark-studio logs [comfy]      follow the app (or ComfyUI) log
+#   ./spark-studio run               run in this terminal instead of in the background
+#   ./spark-studio update            update ComfyUI and Spark Studio's packages
+#   ./spark-studio models [packs]    list or download model packs
+set -euo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+[[ -f "$HERE/config.env" ]] || { echo "Run ./install.sh first."; exit 1; }
+set -a; source "$HERE/config.env"; set +a
+UNITS=(spark-studio-comfy spark-studio)
+
+case "${1:-status}" in
+  status)
+    for u in "${UNITS[@]}"; do
+      printf '  %-20s %s\n' "$u" "$(systemctl --user is-active "$u" 2>/dev/null || true)"
+    done
+    curl -fs "$COMFY_URL/system_stats" >/dev/null && echo "  ComfyUI answering at $COMFY_URL" || echo "  ComfyUI not answering at $COMFY_URL"
+    echo "  Open: http://$(hostname -I 2>/dev/null | awk '{print $1}'):$APP_PORT"
+    ;;
+  start|stop|restart)
+    systemctl --user "$1" "${UNITS[@]}" 2>/dev/null || systemctl --user "$1" spark-studio
+    "$0" status ;;
+  logs)
+    u=spark-studio; [[ "${2:-}" == comfy ]] && u=spark-studio-comfy
+    journalctl --user -u "$u" -f -n 100 ;;
+  run)
+    systemctl --user stop "${UNITS[@]}" 2>/dev/null || true
+    if ! curl -fs "$COMFY_URL/system_stats" >/dev/null 2>&1; then
+      (cd "$COMFY_DIR" && "$COMFY_PY" main.py --listen 127.0.0.1 --port "$COMFY_PORT" $COMFY_ARGS) &
+      trap 'kill %1 2>/dev/null' EXIT
+      echo "Starting ComfyUI…"; for _ in $(seq 1 90); do curl -fs "$COMFY_URL/system_stats" >/dev/null 2>&1 && break; sleep 2; done
+    fi
+    cd "$HERE/app" && APP_DATA="$HERE/data" "$HERE/app-venv/bin/uvicorn" server:app --host "$APP_HOST" --port "$APP_PORT" ;;
+  update)
+    git -C "$COMFY_DIR" pull --ff-only && "$COMFY_PY" -m pip install -q -r "$COMFY_DIR/requirements.txt"
+    "$HERE/app-venv/bin/python" -m pip install -q -U -r "$HERE/app/requirements.txt"
+    "$0" restart ;;
+  models)
+    shift; "$HERE/app-venv/bin/python" "$HERE/download_models.py" "$@" ;;
+  free)
+    # Unload models from memory (handy on unified memory when switching between image and video)
+    curl -fs -X POST "$COMFY_URL/free" -H 'Content-Type: application/json' -d '{"unload_models":true,"free_memory":true}' && echo "Models unloaded." ;;
+  *) sed -n '2,9p' "$0" ;;
+esac

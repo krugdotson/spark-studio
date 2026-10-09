@@ -1,0 +1,47 @@
+{
+  "modes": [
+    {"id": "image", "name": "Image", "blurb": "Describe a picture and get it rendered.", "needs_image": false},
+    {"id": "edit", "name": "Edit a photo", "blurb": "Upload a photo and say what to change.", "needs_image": true},
+    {"id": "t2v", "name": "Text to video", "blurb": "Describe a scene and get a short clip.", "needs_image": false},
+    {"id": "i2v", "name": "Photo to video", "blurb": "Bring a still image to life.", "needs_image": true}
+  ],
+  "styles": {
+    "image": [
+      {"id": "none", "name": "Just my words", "blurb": "No styling added. Your prompt as written.", "template": "{prompt}", "aspect": "1:1", "hue": 220},
+      {"id": "photo", "name": "Photoreal", "blurb": "Natural light, true-to-life detail.", "template": "{prompt}. Photorealistic photograph, natural lighting, shot on a full-frame camera with a 50mm lens, sharp focus, true-to-life colors, fine detail.", "aspect": "3:2", "hue": 30},
+      {"id": "cinematic", "name": "Cinematic still", "blurb": "Moody film frame, anamorphic look.", "template": "Cinematic film still: {prompt}. Anamorphic widescreen, dramatic lighting, shallow depth of field, rich color grade, subtle film grain.", "aspect": "16:9", "hue": 200},
+      {"id": "portrait", "name": "Studio portrait", "blurb": "Clean backdrop, flattering soft light.", "template": "Professional studio portrait of {prompt}. Soft key light with gentle rim light, seamless backdrop, 85mm lens, crisp skin texture, magazine quality.", "aspect": "3:4", "hue": 340},
+      {"id": "product", "name": "Product shot", "blurb": "Ad-ready packshot on a clean set.", "template": "Commercial product photography of {prompt}. Clean minimal set, softbox lighting, subtle reflections, high-end advertising look, crisp detail.", "aspect": "1:1", "hue": 160},
+      {"id": "anime", "name": "Anime", "blurb": "Cel-shaded, vivid key-visual style.", "template": "Anime key visual of {prompt}. Clean line art, cel shading, vivid colors, detailed background, dynamic composition.", "aspect": "16:9", "hue": 290},
+      {"id": "illustration", "name": "Storybook", "blurb": "Warm painterly illustration.", "template": "Warm storybook illustration of {prompt}. Gouache and watercolor textures, soft edges, charming details, gentle palette.", "aspect": "4:3", "hue": 50},
+      {"id": "fantasy", "name": "Fantasy art", "blurb": "Epic concept-art painting.", "template": "Epic fantasy concept art of {prompt}. Painterly, atmospheric lighting, grand sense of scale, highly detailed.", "aspect": "16:9", "hue": 260},
+      {"id": "poster", "name": "Poster & text", "blurb": "Graphic layouts with legible lettering.", "template": "Graphic poster design: {prompt}. Bold typography rendered clearly and spelled exactly, strong layout, print-ready.", "aspect": "2:3", "hue": 10}
+    ],
+    "edit": [
+      {"id": "free", "name": "Anything", "blurb": "Say exactly what to change.", "template": "{prompt}", "hue": 220, "placeholder": "Make it nighttime with the street lights on"},
+      {"id": "background", "name": "New background", "blurb": "Keep the subject, swap the scene.", "template": "Replace the background with {prompt}. Keep the main subject exactly the same, matching the lighting to the new scene.", "hue": 160, "placeholder": "a sunny beach at golden hour"},
+      {"id": "restyle", "name": "Restyle", "blurb": "Repaint in a different art style.", "template": "Redraw this image in the style of {prompt}, keeping the same composition and subjects.", "hue": 290, "placeholder": "an oil painting with thick brushstrokes"},
+      {"id": "remove", "name": "Remove something", "blurb": "Erase an object cleanly.", "template": "Remove {prompt} from the image and fill the area naturally so it looks untouched.", "hue": 10, "placeholder": "the people in the background"},
+      {"id": "add", "name": "Add something", "blurb": "Place a new object into the scene.", "template": "Add {prompt} to the image, matching the perspective, lighting and style.", "hue": 50, "placeholder": "a red vintage bicycle leaning on the wall"},
+      {"id": "outfit", "name": "Change outfit", "blurb": "Dress the person differently.", "template": "Change the person's clothing to {prompt}. Keep their face, pose and the background the same.", "hue": 340, "placeholder": "a navy tailored suit"},
+      {"id": "text", "name": "Change text", "blurb": "Rewrite signs, labels, captions.", "template": "Change the text in the image to read \"{prompt}\", keeping the same font style and placement.", "hue": 200, "placeholder": "GRAND OPENING"},
+      {"id": "restore", "name": "Restore photo", "blurb": "Fix an old or damaged photo.", "template": "Restore this photo: remove scratches, dust and damage, sharpen details and correct faded colors. {prompt}", "hue": 30, "placeholder": "(optional) colorize it too"}
+    ],
+    "t2v": [
+      {"id": "none", "name": "Just my words", "blurb": "No styling added.", "template": "{prompt}", "aspect": "16:9", "hue": 220},
+      {"id": "cinematic", "name": "Cinematic", "blurb": "Smooth camera, filmic lighting.", "template": "{prompt}. Cinematic shot, smooth dolly camera movement, dramatic lighting, shallow depth of field, film color grade.", "aspect": "16:9", "hue": 200},
+      {"id": "handheld", "name": "Documentary", "blurb": "Handheld, natural and real.", "template": "{prompt}. Handheld documentary footage, natural light, realistic motion, candid feel.", "aspect": "16:9", "hue": 30},
+      {"id": "drone", "name": "Aerial", "blurb": "Sweeping drone flyover.", "template": "Aerial drone shot: {prompt}. Slow sweeping flyover, wide establishing view, golden-hour light.", "aspect": "16:9", "hue": 160},
+      {"id": "social", "name": "Vertical social", "blurb": "Phone-format, punchy motion.", "template": "{prompt}. Vertical video, vibrant colors, dynamic motion, eye-catching.", "aspect": "9:16", "hue": 340},
+      {"id": "animated", "name": "3D animation", "blurb": "Stylized animated-film look.", "template": "{prompt}. Stylized 3D animated film look, soft global illumination, expressive motion.", "aspect": "16:9", "hue": 290},
+      {"id": "anime", "name": "Anime", "blurb": "Hand-drawn anime motion.", "template": "{prompt}. Anime style animation, cel shading, vivid colors, fluid motion.", "aspect": "16:9", "hue": 260}
+    ],
+    "i2v": [
+      {"id": "free", "name": "Describe the motion", "blurb": "Say what should happen.", "template": "{prompt}", "hue": 220, "placeholder": "She turns toward the camera and smiles as the wind moves her hair"},
+      {"id": "alive", "name": "Bring it to life", "blurb": "Subtle natural movement.", "template": "{prompt}. Subtle natural movement, gentle breathing and blinking, light breeze, camera holds steady.", "hue": 160, "placeholder": "(optional) anything specific"},
+      {"id": "pushin", "name": "Slow push-in", "blurb": "Camera glides toward the subject.", "template": "Slow cinematic push-in toward the subject. {prompt}", "hue": 200, "placeholder": "(optional) what the subject does"},
+      {"id": "orbit", "name": "Orbit", "blurb": "Camera circles around.", "template": "The camera slowly orbits around the subject, revealing depth. {prompt}", "hue": 290, "placeholder": "(optional) extra detail"},
+      {"id": "action", "name": "Action", "blurb": "Big, energetic motion.", "template": "{prompt}. Energetic dynamic action, fast motion, the camera tracks the movement.", "hue": 10, "placeholder": "The car speeds off down the road kicking up dust"}
+    ]
+  }
+}

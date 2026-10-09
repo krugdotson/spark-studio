@@ -1,0 +1,45 @@
+{
+  "_comment": "Model packs. 'dir' is the ComfyUI models/ subfolder. Files are saved under their basename.",
+  "packs": {
+    "image": {
+      "label": "Images (Qwen-Image 2512)",
+      "files": [
+        {"repo": "Comfy-Org/Qwen-Image_ComfyUI", "path": "split_files/diffusion_models/qwen_image_2512_fp8_e4m3fn.safetensors", "dir": "diffusion_models", "gb": 20.4},
+        {"repo": "Comfy-Org/Qwen-Image_ComfyUI", "path": "split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors", "dir": "text_encoders", "gb": 9.4},
+        {"repo": "Comfy-Org/Qwen-Image_ComfyUI", "path": "split_files/vae/qwen_image_vae.safetensors", "dir": "vae", "gb": 0.3},
+        {"repo": "lightx2v/Qwen-Image-2512-Lightning", "path": "Qwen-Image-2512-Lightning-4steps-V1.0-bf16.safetensors", "dir": "loras", "gb": 0.8}
+      ]
+    },
+    "edit": {
+      "label": "Photo editing (Qwen-Image-Edit 2511)",
+      "files": [
+        {"repo": "Comfy-Org/Qwen-Image-Edit_ComfyUI", "path": "split_files/diffusion_models/qwen_image_edit_2511_fp8mixed.safetensors", "dir": "diffusion_models", "gb": 20.5},
+        {"repo": "Comfy-Org/Qwen-Image_ComfyUI", "path": "split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors", "dir": "text_encoders", "gb": 9.4},
+        {"repo": "Comfy-Org/Qwen-Image_ComfyUI", "path": "split_files/vae/qwen_image_vae.safetensors", "dir": "vae", "gb": 0.3},
+        {"repo": "lightx2v/Qwen-Image-Edit-2511-Lightning", "path": "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors", "dir": "loras", "gb": 0.8}
+      ]
+    },
+    "t2v": {
+      "label": "Text-to-video (WAN 2.2 14B)",
+      "files": [
+        {"repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged", "path": "split_files/diffusion_models/wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors", "dir": "diffusion_models", "gb": 14.3},
+        {"repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged", "path": "split_files/diffusion_models/wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors", "dir": "diffusion_models", "gb": 14.3},
+        {"repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged", "path": "split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors", "dir": "text_encoders", "gb": 6.7},
+        {"repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged", "path": "split_files/vae/wan_2.1_vae.safetensors", "dir": "vae", "gb": 0.3},
+        {"repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged", "path": "split_files/loras/wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors", "dir": "loras", "gb": 1.2},
+        {"repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged", "path": "split_files/loras/wan2.2_t2v_lightx2v_4steps_lora_v1.1_low_noise.safetensors", "dir": "loras", "gb": 1.2}
+      ]
+    },
+    "i2v": {
+      "label": "Photo-to-video (WAN 2.2 14B)",
+      "files": [
+        {"repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged", "path": "split_files/diffusion_models/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors", "dir": "diffusion_models", "gb": 14.3},
+        {"repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged", "path": "split_files/diffusion_models/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors", "dir": "diffusion_models", "gb": 14.3},
+        {"repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged", "path": "split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors", "dir": "text_encoders", "gb": 6.7},
+        {"repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged", "path": "split_files/vae/wan_2.1_vae.safetensors", "dir": "vae", "gb": 0.3},
+        {"repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged", "path": "split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors", "dir": "loras", "gb": 1.2},
+        {"repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged", "path": "split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors", "dir": "loras", "gb": 1.2}
+      ]
+    }
+  }
+}
