@@ -6,6 +6,7 @@
 #   ./spark-studio run               run in this terminal instead of in the background
 #   ./spark-studio update            update ComfyUI and Spark Studio's packages
 #   ./spark-studio models [packs]    list or download model packs
+#   ./spark-studio selftest [--quick] render one of each thing it can make and time it
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 [[ -f "$HERE/config.env" ]] || { echo "Run ./install.sh first."; exit 1; }
@@ -40,8 +41,10 @@ case "${1:-status}" in
     "$0" restart ;;
   models)
     shift; "$HERE/app-venv/bin/python" "$HERE/download_models.py" "$@" ;;
+  selftest)
+    shift; "$HERE/app-venv/bin/python" "$HERE/selftest.py" "$@" ;;
   free)
     # Unload models from memory (handy on unified memory when switching between image and video)
     curl -fs -X POST "$COMFY_URL/free" -H 'Content-Type: application/json' -d '{"unload_models":true,"free_memory":true}' && echo "Models unloaded." ;;
-  *) sed -n '2,9p' "$0" ;;
+  *) sed -n '2,10p' "$0" ;;
 esac

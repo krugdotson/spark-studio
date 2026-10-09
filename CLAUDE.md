@@ -9,7 +9,8 @@ When the user asks to install or set it up:
 1. Check the machine: `uname -m`, `nvidia-smi`, `python3 --version`, free disk space (`df -h ~`). About 200 GB is needed for all models (about 42 GB each for the MiniMax H3 and LTX 2.3 packs).
    Also check `ls /usr/include/python3*/Python.h`: if it's missing, ask the user to run `sudo apt install -y python3-dev`
    in a normal terminal (PyTorch compiles a GPU helper at first use and fails without it).
-2. Run `./install.sh`. It reuses an existing ComfyUI (or installs one), installs PyTorch with CUDA 13 if needed,
+2. Run `./install.sh` (or `./install.sh --all` for a hands-off install: missing system packages via sudo, all model
+   packs, then `./spark-studio selftest`; it pins ComfyUI v0.39.2 and PyTorch 2.14.1, see README "Versions"). It reuses an existing ComfyUI (or installs one), installs PyTorch with CUDA 13 if needed,
    installs the app, and creates two systemd user services: `spark-studio-comfy` and `spark-studio`.
    It prompts for model packs at the end; answer with nothing (press Enter) and download separately in step 3,
    because downloads are long.
