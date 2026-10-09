@@ -11,10 +11,16 @@ It makes four things:
 | Text to video | WAN 2.2 14B T2V (fp8) | ~38 GB |
 | Photo to video | WAN 2.2 14B I2V (fp8) | ~31 GB extra (shares the encoder with Text to video) |
 | Text or photo to video, **with sound** | MiniMax H3 (int8 + NVFP4 text encoder) | ~42 GB (pack name: `minimax`) |
+| Text or photo to video, **with sound**, up to 1080p | LTX 2.3 22B (fp8 + fp4 Gemma 3 text encoder) | ~42 GB (pack name: `ltx`) |
 
 Both video modes have a **Model** switch: WAN 2.2 makes silent clips; MiniMax H3 generates the picture and a
-matching stereo soundtrack (voices, sound effects, music) together, at 24 fps, 5 to 15 seconds. Describe the sound
-in your prompt. Everything together comes to about 160 GB of disk; download only the packs you want.
+matching stereo soundtrack (voices, sound effects, music) together, at 24 fps, 5 to 15 seconds. LTX 2.3 also makes
+video with sound, at 25 fps, 3 to 10 seconds, up to 1080p; it renders a half-size draft, upscales it 2x and refines it,
+and only has a Fast mode. Describe the sound in your prompt. Everything together comes to about 200 GB of disk;
+download only the packs you want.
+
+**Downloading packs from the browser:** the **Models** button (top right of the page) lists every pack, shows what's
+installed, and has Download, Stop and Resume buttons with a progress bar. Downloads keep going if you close the page.
 
 ## Install
 
@@ -30,7 +36,8 @@ The installer:
 1. Finds an existing ComfyUI (for example one set up with NVIDIA's ComfyUI playbook) and reuses it, or installs a fresh copy next to this folder.
 2. Sets up PyTorch with CUDA 13 for the GB10 if needed and checks that it can see the GPU.
 3. Installs the Spark Studio web app and sets both to run in the background and start on boot.
-4. Asks which model packs to download. Type `all`, or a few of `image edit t2v i2v`, or press Enter and do it later.
+4. Asks which model packs to download. Type `all`, or a few of `image edit t2v i2v minimax ltx`, or press Enter and do it later
+   (you can also download them from the **Models** button in the web page).
 
 If your ComfyUI lives somewhere unusual: `COMFY_DIR=/path/to/ComfyUI ./install.sh`
 
@@ -70,6 +77,9 @@ As a rough estimate (not benchmarked) for a 5-second 480p clip: a few minutes on
 ## Troubleshooting
 
 - **"Models aren't downloaded yet"**: run the `./spark-studio models <mode>` command the page shows, then refresh.
+- **A job fails with `#include <Python.h>` / `gcc ... returned non-zero exit status`**: Ubuntu's Python developer files are
+  missing (PyTorch compiles a small GPU helper the first time). Run `sudo apt install -y python3-dev`, then
+  `systemctl --user restart spark-studio-comfy`.
 - **Out of memory**: unified memory can get fragmented by the page cache. Run `sudo sh -c 'sync; echo 3 > /proc/sys/vm/drop_caches'` (NVIDIA's recommended fix) or `./spark-studio free`.
 - **Can't open the page from another computer**: if the firewall is on, `sudo ufw allow 7860/tcp`.
 - **Keeps stopping when you log out**: `sudo loginctl enable-linger $USER`.
@@ -100,3 +110,5 @@ Add an entry to the right list in `app/presets.json`. `{prompt}` is replaced wit
 ## Model licenses
 
 Qwen-Image, Qwen-Image-Edit and WAN 2.2 are released under Apache 2.0. The Lightning LoRAs are from lightx2v. Files are downloaded from Hugging Face (Comfy-Org repackages and lightx2v).
+
+LTX 2.3 is **not** Apache 2.0: it uses Lightricks' [LTX-2 Community License](https://huggingface.co/Lightricks/LTX-2.3), which has conditions for commercial use by larger companies. Read it before using LTX output commercially. Files come from Lightricks and Comfy-Org on Hugging Face.

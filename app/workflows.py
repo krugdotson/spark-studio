@@ -68,11 +68,33 @@ MINIMAX_SIZES = {
     "480p": {"16:9": (864, 480), "9:16": (480, 864), "1:1": (640, 640), "4:3": (736, 544), "3:4": (544, 736)},
     "768p": {"16:9": (1344, 768), "9:16": (768, 1344), "1:1": (1024, 1024), "4:3": (1152, 864), "3:4": (864, 1152)},
 }
-ENGINES = ("wan", "minimax")
+# LTX 2.3 (Lightricks): video with native audio. Wiring follows ComfyUI's official "LTX-2.3" template
+# (video_ltx2_3_t2v): a half-size first pass, a 2x latent upscale, then a short refine pass, using the
+# distilled LoRA. That template has no separate full-quality path, so LTX only runs in Fast mode.
+LTX = {
+    "checkpoints": ["ltx-2.3-22b-dev-fp8.safetensors"],
+    "text_encoders": ["gemma_3_12B_it_fp4_mixed.safetensors"],
+    "loras": ["ltx_2.3_22b_distilled_1.1_lora_dynamic_fro09_avg_rank_111_bf16.safetensors"],
+    "latent_upscale_models": ["ltx-2.3-spatial-upscaler-x2-1.1.safetensors"],
+}
+LTX_FPS = 25
+LTX_NEG = "pc game, console game, video game, cartoon, childish, ugly"
+# Final sizes; each side halves to a multiple of 32 for the first pass.
+LTX_SIZES = {
+    "480p": {"16:9": (832, 448), "9:16": (448, 832), "1:1": (640, 640), "4:3": (768, 576), "3:4": (576, 768)},
+    "720p": {"16:9": (1280, 704), "9:16": (704, 1280), "1:1": (960, 960), "4:3": (1088, 832), "3:4": (832, 1088)},
+    "1080p": {"16:9": (1920, 1088), "9:16": (1088, 1920), "1:1": (1408, 1408), "4:3": (1600, 1216), "3:4": (1216, 1600)},
+}
+ENGINES = ("wan", "minimax", "ltx")
 
 
 def sizes_for(engine):
-    return MINIMAX_SIZES if engine == "minimax" else VIDEO_SIZES
+    return {"minimax": MINIMAX_SIZES, "ltx": LTX_SIZES}.get(engine, VIDEO_SIZES)
+
+
+def ltx_frames(seconds):
+    # LTX wants 8n+1 frames
+    return 8 * max(1, round(seconds * LTX_FPS / 8)) + 1
 
 
 def minimax_frames(seconds):
@@ -240,11 +262,89 @@ def _minimax(p, mode):
     return g, ["sampler"]
 
 
+def _ltx(p, mode):
+    res = p.get("resolution", "720p")
+    w, h = p.get("size") or LTX_SIZES.get(res, LTX_SIZES["720p"]).get(p.get("aspect", "16:9"), (1280, 704))
+    length = ltx_frames(float(p.get("seconds", 5)))
+    t2v = mode != "i2v"
+    g = {
+        "ckpt": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": LTX["checkpoints"][0]}},
+        "audio_vae": {"class_type": "LTXVAudioVAELoader", "inputs": {"ckpt_name": LTX["checkpoints"][0]}},
+        "clip": {"class_type": "LTXAVTextEncoderLoader", "inputs": {
+            "text_encoder": LTX["text_encoders"][0], "ckpt_name": LTX["checkpoints"][0], "device": "default"}},
+        "lora": {"class_type": "LoraLoaderModelOnly", "inputs": {"model": ["ckpt", 0], "lora_name": LTX["loras"][0], "strength_model": 0.5}},
+        "upscaler": {"class_type": "LatentUpscaleModelLoader", "inputs": {"model_name": LTX["latent_upscale_models"][0]}},
+        "pos_raw": {"class_type": "CLIPTextEncode", "inputs": {"text": p["prompt"], "clip": ["clip", 0]}},
+        "neg_raw": {"class_type": "CLIPTextEncode", "inputs": {"text": p.get("negative") or LTX_NEG, "clip": ["clip", 0]}},
+        "cond": {"class_type": "LTXVConditioning", "inputs": {"positive": ["pos_raw", 0], "negative": ["neg_raw", 0], "frame_rate": LTX_FPS}},
+        "sampler_select": {"class_type": "KSamplerSelect", "inputs": {"sampler_name": "euler"}},
+        # pass 1: half size
+        "latent": {"class_type": "EmptyLTXVLatentVideo", "inputs": {"width": w // 2, "height": h // 2, "length": length, "batch_size": 1}},
+        "audio_latent": {"class_type": "LTXVEmptyLatentAudio", "inputs": {
+            "frames_number": length, "frame_rate": LTX_FPS, "batch_size": 1, "audio_vae": ["audio_vae", 0]}},
+    }
+    if t2v:
+        image = None
+        first_latent = ["latent", 0]
+    else:  # photo-to-video: fit the photo to the frame, then a small copy for conditioning (as in the template)
+        long_side = max(w, h)
+        g["load"] = {"class_type": "LoadImage", "inputs": {"image": p["image"]}}
+        g["fit"] = {"class_type": "ImageScale", "inputs": {"image": ["load", 0], "upscale_method": "lanczos", "width": w, "height": h, "crop": "center"}}
+        g["small"] = {"class_type": "ImageScale", "inputs": {"image": ["fit", 0], "upscale_method": "lanczos",
+                                                             "width": w * 512 // long_side, "height": h * 512 // long_side, "crop": "disabled"}}
+        g["prep"] = {"class_type": "LTXVPreprocess", "inputs": {"image": ["small", 0], "img_compression": 18}}
+        image = ["prep", 0]
+        g["guide1"] = {"class_type": "LTXVImgToVideoInplace", "inputs": {
+            "vae": ["ckpt", 2], "image": image, "latent": ["latent", 0], "strength": 0.7, "bypass": False}}
+        first_latent = ["guide1", 0]
+    g.update({
+        "av1": {"class_type": "LTXVConcatAVLatent", "inputs": {"video_latent": first_latent, "audio_latent": ["audio_latent", 0]}},
+        "noise1": {"class_type": "RandomNoise", "inputs": {"noise_seed": p["seed"]}},
+        "guider1": {"class_type": "CFGGuider", "inputs": {"model": ["lora", 0], "positive": ["cond", 0], "negative": ["cond", 1], "cfg": 1.0}},
+        "sigmas1": {"class_type": "ManualSigmas", "inputs": {"sigmas": "1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0"}},
+        "pass1": {"class_type": "SamplerCustomAdvanced", "inputs": {
+            "noise": ["noise1", 0], "guider": ["guider1", 0], "sampler": ["sampler_select", 0], "sigmas": ["sigmas1", 0], "latent_image": ["av1", 0]}},
+        "split1": {"class_type": "LTXVSeparateAVLatent", "inputs": {"av_latent": ["pass1", 0]}},
+        # 2x upscale, then pass 2 refines at full size
+        "upscale": {"class_type": "LTXVLatentUpsampler", "inputs": {"samples": ["split1", 0], "upscale_model": ["upscaler", 0], "vae": ["ckpt", 2]}},
+    })
+    second_latent = ["upscale", 0]
+    if not t2v:
+        g["guide2"] = {"class_type": "LTXVImgToVideoInplace", "inputs": {
+            "vae": ["ckpt", 2], "image": image, "latent": ["upscale", 0], "strength": 1.0, "bypass": False}}
+        second_latent = ["guide2", 0]
+    g.update({
+        "av2": {"class_type": "LTXVConcatAVLatent", "inputs": {"video_latent": second_latent, "audio_latent": ["split1", 1]}},
+        "crop": {"class_type": "LTXVCropGuides", "inputs": {"positive": ["cond", 0], "negative": ["cond", 1], "latent": ["split1", 0]}},
+        "noise2": {"class_type": "RandomNoise", "inputs": {"noise_seed": 42}},
+        "guider2": {"class_type": "CFGGuider", "inputs": {"model": ["lora", 0], "positive": ["crop", 0], "negative": ["crop", 1], "cfg": 1.0}},
+        "sigmas2": {"class_type": "ManualSigmas", "inputs": {"sigmas": "0.85, 0.7250, 0.4219, 0.0"}},
+        "pass2": {"class_type": "SamplerCustomAdvanced", "inputs": {
+            "noise": ["noise2", 0], "guider": ["guider2", 0], "sampler": ["sampler_select", 0], "sigmas": ["sigmas2", 0], "latent_image": ["av2", 0]}},
+        "split2": {"class_type": "LTXVSeparateAVLatent", "inputs": {"av_latent": ["pass2", 0]}},
+        "decode": {"class_type": "VAEDecodeTiled", "inputs": {
+            "samples": ["split2", 0], "vae": ["ckpt", 2], "tile_size": 768, "overlap": 64, "temporal_size": 4096, "temporal_overlap": 4}},
+        "decode_audio": {"class_type": "LTXVAudioVAEDecode", "inputs": {"samples": ["split2", 1], "audio_vae": ["audio_vae", 0]}},
+        "video": {"class_type": "CreateVideo", "inputs": {"images": ["decode", 0], "audio": ["decode_audio", 0], "fps": LTX_FPS}},
+        "save": {"class_type": "SaveVideo", "inputs": {"video": ["video", 0], "filename_prefix": f"spark-studio/ltx-{mode}", "format": "auto"}},
+    })
+    return g, ["pass1", "pass2"]
+
+
+def _engine_video(p, mode):
+    engine = p.get("engine")
+    if engine == "minimax":
+        return _minimax(p, mode)
+    if engine == "ltx":
+        return _ltx(p, mode)
+    return _video(p, mode)
+
+
 BUILDERS = {
     "image": build_image,
     "edit": build_edit,
-    "t2v": lambda p: _minimax(p, "t2v") if p.get("engine") == "minimax" else _video(p, "t2v"),
-    "i2v": lambda p: _minimax(p, "i2v") if p.get("engine") == "minimax" else _video(p, "i2v"),
+    "t2v": lambda p: _engine_video(p, "t2v"),
+    "i2v": lambda p: _engine_video(p, "i2v"),
 }
 
 
@@ -258,6 +358,9 @@ def required_files(mode, fast, engine="wan"):
         if fast:
             req["loras"] = [MINIMAX_TURBO]
         return req
+    if engine == "ltx" and mode in ("t2v", "i2v"):
+        # The distilled LoRA is part of LTX's only (fast) path, so it's always required.
+        return {k: list(v) for k, v in LTX.items()}
     req = {k: list(v) for k, v in REQUIRED[mode].items()}
     if fast:
         req.setdefault("loras", []).extend(FAST_LORAS[mode])

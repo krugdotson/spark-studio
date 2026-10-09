@@ -222,6 +222,34 @@ dialog::backdrop { background: rgba(10, 12, 18, .7); }
   padding: 10px 16px; border-radius: 999px; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .2s;
 }
 .toast.show { opacity: 1; }
+/* ---------- model packs ---------- */
+.models-btn {
+  border: 1.5px solid var(--rule); background: var(--frame); border-radius: 999px; padding: 5px 12px;
+  cursor: pointer; font-weight: 600; font-size: 13.5px; display: flex; align-items: center; gap: 7px;
+}
+.models-btn .dot { display: none; }
+.models-btn.busy .dot { display: block; background: var(--cobalt); animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .3; } }
+.packs-wrap { padding: 22px 22px 24px; position: relative; }
+.packs-wrap h3 { margin: 0 0 4px; font-size: 20px; letter-spacing: -0.015em; padding-right: 40px; }
+.packs-wrap > p { margin: 0 0 16px; font-size: 14px; color: var(--graphite); }
+.packs-wrap .close { background: var(--lightbox-2); color: var(--ink); }
+.packs { display: grid; gap: 10px; }
+.pack {
+  display: grid; grid-template-columns: 1fr auto; gap: 4px 14px; align-items: center;
+  border: 1.5px solid var(--rule); border-radius: var(--radius-sm); padding: 12px 14px;
+}
+.pack b { font-size: 15px; }
+.pack .sub { font-size: 13px; color: var(--graphite); grid-column: 1; }
+.pack .act { grid-row: 1 / span 2; grid-column: 2; }
+.pack .pill { font-size: 12.5px; font-weight: 600; padding: 3px 10px; border-radius: 999px; }
+.pill.ok { color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); }
+.pack .meter { width: 100%; margin: 6px 0 0; grid-column: 1 / -1; }
+.pack .msg { grid-column: 1 / -1; font-size: 12.5px; color: var(--graphite); overflow-wrap: anywhere; }
+.pack .msg.bad { color: var(--bad); }
+.btn.small { padding: 6px 12px; font-size: 13.5px; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+#packsDialog { width: min(620px, calc(100vw - 32px)); }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 </style>
 </head>
@@ -232,6 +260,7 @@ dialog::backdrop { background: rgba(10, 12, 18, .7); }
     Spark Studio
   </div>
   <div class="machine" id="machine"><span class="dot" id="dot"></span><span id="machineText">Connecting…</span></div>
+  <button class="models-btn" id="modelsBtn" type="button"><span class="dot"></span><span id="modelsBtnText">Models</span></button>
 </header>
 
 <main class="shell">
@@ -284,6 +313,12 @@ dialog::backdrop { background: rgba(10, 12, 18, .7); }
 </main>
 
 <dialog id="viewer"></dialog>
+<dialog id="packsDialog" aria-labelledby="packsTitle"><div class="packs-wrap">
+  <button class="close" aria-label="Close" id="packsClose">×</button>
+  <h3 id="packsTitle">Model packs</h3>
+  <p id="packsSub">Each pack adds one kind of creation. Downloads keep going if you close this page.</p>
+  <div class="packs" id="packs"></div>
+</div></dialog>
 <div class="toast" id="toast" role="status"></div>
 
 <script>
@@ -300,11 +335,14 @@ const VIDEO = (m) => m === "t2v" || m === "i2v";
 
 let CFG = null;
 const S = { mode: null, style: null, image: null, aspect: null, fast: true, seconds: 5, resolution: "480p", count: 1, engine: null };
-const statusKey = (mode, engine) => (VIDEO(mode) && engine === "minimax") ? `${mode}:minimax` : mode;
+const statusKey = (mode, engine) => (VIDEO(mode) && engine && engine !== "wan") ? `${mode}:${engine}` : mode;
+const SOUND = (engine) => engine === "minimax" || engine === "ltx";
+const ENGINE_NAME = (e) => (CFG && CFG.engines && CFG.engines[e] ? CFG.engines[e].name : { minimax: "MiniMax H3", ltx: "LTX 2.3" }[e] || "WAN 2.2");
 const curStatus = () => CFG.status[statusKey(S.mode, S.engine)];
 function defaultEngine() {
-  // Prefer MiniMax H3 (video with sound) once it's downloaded
-  return (CFG.status["t2v:minimax"] || {}).ready ? "minimax" : ((CFG.status.t2v || {}).ready ? "wan" : "minimax");
+  // Prefer a video-with-sound engine that's downloaded: MiniMax H3, then LTX 2.3, then WAN
+  for (const e of ["minimax", "ltx", "wan"]) if ((CFG.status[statusKey("t2v", e)] || {}).ready) return e;
+  return "minimax";
 }
 let JOBS = [];
 let pollTimer = null;
@@ -342,7 +380,7 @@ async function loadConfig() {
 function renderModes() {
   $("#modes").innerHTML = CFG.modes.map((m) => {
     const st = CFG.status[m.id];
-    const anyReady = st.ready || (VIDEO(m.id) && (CFG.status[`${m.id}:minimax`] || {}).ready);
+    const anyReady = st.ready || (VIDEO(m.id) && Object.keys(CFG.engines || {}).some((e) => (CFG.status[statusKey(m.id, e)] || {}).ready));
     const need = CFG.online && !anyReady ? '<span class="need">Models not downloaded yet</span>' : "";
     return `<button class="mode" data-mode="${m.id}" aria-pressed="${S.mode === m.id}">
       ${ICONS[m.id] || ""}<b>${esc(m.name)}</b><span>${esc(m.blurb)}</span>${need}</button>`;
@@ -392,7 +430,7 @@ function renderStep3() {
     ? "A red fox trots through fresh snow in a quiet pine forest at dawn"
     : "A lighthouse on a rocky cliff during a storm, waves crashing");
   if (VIDEO(S.mode) && !S.engine) S.engine = defaultEngine();
-  if (VIDEO(S.mode) && S.engine === "minimax") {
+  if (VIDEO(S.mode) && SOUND(S.engine)) {
     if (!st.placeholder || optional) $("#prompt").placeholder = S.mode === "t2v"
       ? "A red fox trots through fresh snow at dawn. Sound: crunching snow, birdsong, a soft wind."
       : "She turns to the camera and says \"Ready when you are.\" Sound: quiet room tone, a light laugh.";
@@ -416,6 +454,9 @@ function updatePreview() {
     (!p && !optional) ? "" : estimate();
 }
 function estimate() {
+  if (VIDEO(S.mode) && S.engine === "ltx") {
+    return "Fast mode only (two passes: draft, then 2x upscale). Timings on the Spark haven't been measured yet. First run is slower while models load.";
+  }
   if (VIDEO(S.mode) && S.engine === "minimax") {
     return (S.fast ? "Turbo mode, 8 steps." : "Full quality, 20 steps; several times slower than Fast.") +
       " Timings on the Spark haven't been measured yet. First run is slower while models load.";
@@ -437,8 +478,11 @@ function renderOpts() {
   if (!S.mode) return;
   if (VIDEO(S.mode) && !S.engine) S.engine = defaultEngine();
   const st = curStatus();
-  const fastDisabled = st.ready && !st.fast_ready ? { true: "Fast mode model not downloaded" } : {};
+  const fastOnly = VIDEO(S.mode) && CFG.engines[S.engine] && CFG.engines[S.engine].fast_only;
+  const fastDisabled = fastOnly ? { false: `${CFG.engines[S.engine].name} only has a fast mode` }
+    : st.ready && !st.fast_ready ? { true: "Fast mode model not downloaded" } : {};
   if (fastDisabled.true) S.fast = false;
+  if (fastDisabled.false) S.fast = true;
   let h = "";
   if (VIDEO(S.mode)) {
     const ens = Object.keys(CFG.engines);
@@ -470,12 +514,83 @@ function renderOpts() {
 }
 function renderNotice() {
   const st = curStatus();
-  const pack = VIDEO(S.mode) && S.engine === "minimax" ? "minimax" : S.mode;
+  const pack = VIDEO(S.mode) && S.engine && S.engine !== "wan" ? S.engine : S.mode;
   let n = "";
   if (!CFG.online) n = "ComfyUI isn't running on the Spark. Start it with <code>systemctl --user restart spark-studio-comfy</code>.";
-  else if (!st.ready || (S.fast && !st.fast_ready)) n = `The models for this aren't downloaded yet. On the Spark, run <code>./spark-studio models ${pack}</code> in the Spark Studio folder, then refresh this page.`;
+  else if (!st.ready || (S.fast && !st.fast_ready)) {
+    const busy = PACKS.download && PACKS.download.state === "running" && PACKS.download.pack === pack;
+    n = busy ? `The models for this are downloading now (${Math.round(PACKS.download.progress * 100)}%). It unlocks when they're done.`
+      : `The models for this aren't downloaded yet. <button class="linkbtn" data-pack="${pack}">Download now</button>`;
+  }
   $("#notice").innerHTML = n ? `<div class="notice">${n}</div>` : "";
+  $("#notice").querySelectorAll("[data-pack]").forEach((b) => b.onclick = () => openPacks(b.dataset.pack));
 }
+
+/* ---------------- model packs ---------------- */
+let PACKS = { packs: [], download: null, free_gb: null };
+let packsTimer = null;
+let packsHighlight = null;
+const dlRunning = () => !!(PACKS.download && PACKS.download.state === "running");
+async function loadPacks() {
+  const was = dlRunning();
+  try { PACKS = await api("/api/models"); } catch (e) { /* server restarting */ }
+  if (was && !dlRunning()) {
+    const d = PACKS.download;
+    toast(d && d.state === "done" ? "Download finished" : "Download stopped");
+    loadConfig();
+  }
+  const b = $("#modelsBtn");
+  b.classList.toggle("busy", dlRunning());
+  $("#modelsBtnText").textContent = dlRunning() ? `Downloading ${Math.round(PACKS.download.progress * 100)}%` : "Models";
+  if ($("#packsDialog").open) renderPacks();
+  if (S.mode && CFG) renderNotice();
+  clearTimeout(packsTimer);
+  packsTimer = setTimeout(loadPacks, dlRunning() ? 3000 : 30000);
+}
+function renderPacks() {
+  const d = PACKS.download;
+  $("#packsSub").textContent = `Each pack adds one kind of creation. Downloads keep going if you close this page.` +
+    (PACKS.free_gb != null ? ` Free disk space: ${PACKS.free_gb} GB.` : "");
+  $("#packs").innerHTML = PACKS.packs.map((p) => {
+    const mine = d && d.pack === p.id;
+    let act, extra = "";
+    if (mine && d.state === "running") {
+      act = `<button class="btn small" data-stop>Stop</button>`;
+      extra = `<div class="meter"><i style="width:${Math.round(d.progress * 100)}%"></i></div>
+        <div class="msg">${d.done_gb} of ${d.total_gb} GB · ${Math.round(d.progress * 100)}%</div>`;
+    } else if (p.installed) {
+      act = `<span class="pill ok">Installed</span>`;
+    } else {
+      act = `<button class="btn small primary" data-dl="${p.id}" ${dlRunning() ? "disabled title='Another download is running'" : ""}>${p.have ? "Resume" : "Download"}</button>`;
+      if (mine && d.state === "failed") extra = `<div class="msg bad">Last try didn't finish: ${esc(d.message || "unknown error")}. Press Resume to try again.</div>`;
+      if (mine && d.state === "stopped") extra = `<div class="msg">Stopped. Resume picks up where it left off.</div>`;
+    }
+    const files = p.installed ? `${p.files} files` : p.have ? `${p.have} of ${p.files} files here` : "Not downloaded";
+    return `<div class="pack" ${packsHighlight === p.id ? 'style="border-color:var(--cobalt)"' : ""}>
+      <b>${esc(p.label)}</b><div class="act">${act}</div>
+      <div class="sub">~${p.gb} GB · ${files}</div>${extra}</div>`;
+  }).join("");
+  $("#packs").querySelectorAll("[data-dl]").forEach((b) => b.onclick = () => startDownload(b.dataset.dl, b));
+  $("#packs").querySelectorAll("[data-stop]").forEach((b) => b.onclick = () => stopDownload(b));
+}
+async function startDownload(pack, b) {
+  b.disabled = true;
+  try { PACKS = await api("/api/models/download", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pack }) }); toast("Download started"); }
+  catch (e) { toast(e.message); }
+  loadPacks();
+}
+async function stopDownload(b) {
+  b.disabled = true;
+  try { PACKS = await api("/api/models/cancel", { method: "POST" }); } catch (e) { toast(e.message); }
+  loadPacks();
+}
+function openPacks(highlight) {
+  packsHighlight = highlight || null;
+  renderPacks(); $("#packsDialog").showModal(); loadPacks();
+}
+$("#modelsBtn").onclick = () => openPacks();
+$("#packsClose").onclick = () => $("#packsDialog").close();
+$("#packsDialog").addEventListener("click", (e) => { if (e.target.id === "packsDialog") e.target.close(); });
 
 /* ---------------- photo upload ---------------- */
 function renderDrop() {
@@ -571,7 +686,7 @@ function renderSheet() {
     } else if (j.status === "done") {
       (j.outputs || []).forEach((o, i) => {
         const media = o.kind === "video"
-          ? `<video src="${fileUrl(o)}#t=0.1" muted loop playsinline preload="metadata"></video><span class="badge">${j.seconds ? j.seconds + " s" : "Video"}${j.engine === "minimax" ? " · sound" : ""}</span>`
+          ? `<video src="${fileUrl(o)}#t=0.1" muted loop playsinline preload="metadata"></video><span class="badge">${j.seconds ? j.seconds + " s" : "Video"}${SOUND(j.engine) ? " · sound" : ""}</span>`
           : `<img src="${fileUrl(o)}" alt="${esc(j.user_prompt)}" loading="lazy">`;
         frames.push(`<div class="frame"><button class="frame-media" style="--ar:${arFor(j)}" data-open="${j.id}" data-i="${i}" aria-label="Open">${media}</button>${meta}</div>`);
       });
@@ -621,7 +736,7 @@ function openViewer(id, i) {
       <dl class="facts">
         <dt>Made</dt><dd>${new Date(j.created * 1000).toLocaleString()}</dd>
         ${j.finished && j.started ? `<dt>Took</dt><dd>${fmtTime(j.finished - j.started)}</dd>` : ""}
-        ${j.engine ? `<dt>Model</dt><dd>${j.engine === "minimax" ? "MiniMax H3" : "WAN 2.2"}</dd>` : ""}
+        ${j.engine ? `<dt>Model</dt><dd>${esc(ENGINE_NAME(j.engine))}</dd>` : ""}
         <dt>Mode</dt><dd>${j.fast ? "Fast" : "Best"}${j.resolution ? ", " + j.resolution : ""}</dd>
         <dt>Seed</dt><dd>${j.seed}</dd>
       </dl>
@@ -664,6 +779,7 @@ function reuse(j) {
 }
 
 loadConfig().then(poll);
+loadPacks();
 setInterval(loadConfig, 30000);
 renderSheet();
 </script>
