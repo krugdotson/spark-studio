@@ -38,6 +38,10 @@ CLIENT_ID = uuid.uuid4().hex
 PRESETS = json.loads((HERE / "presets.json").read_text())
 STYLES = {m: {s["id"]: s for s in lst} for m, lst in PRESETS["styles"].items()}
 MODES = {m["id"]: m for m in PRESETS["modes"]}
+# LTX: ComfyUI's audio latent caps at 1000 frames (40 s at 25 fps); 30 s at 720p was tested on the Spark (7 min, ~75 GB).
+# 1080p hasn't been tested past 10 s.
+LTX_MAX_SECONDS = 30
+LTX_HD_MAX_SECONDS = 10
 VIDEO_MODES = ("t2v", "i2v")
 PACKS = json.loads((HERE / "models.json").read_text())["packs"]
 DOWNLOADER = HERE.parent / "download_models.py"
@@ -247,7 +251,8 @@ async def config():
         "engines": {
             "wan": {"name": "WAN 2.2", "blurb": "Silent video", "resolutions": list(wf.VIDEO_SIZES), "seconds": [3, 5, 8], "pack": None},
             "minimax": {"name": "MiniMax H3", "blurb": "Video with sound", "resolutions": list(wf.MINIMAX_SIZES), "seconds": [5, 8, 10, 15], "pack": "minimax"},
-            "ltx": {"name": "LTX 2.3", "blurb": "Video with sound, up to 1080p", "resolutions": list(wf.LTX_SIZES), "seconds": [3, 5, 8, 10], "pack": "ltx", "fast_only": True},
+            "ltx": {"name": "LTX 2.3", "blurb": "Video with sound, up to 1080p", "resolutions": list(wf.LTX_SIZES), "seconds": [3, 5, 8, 10, 15, 20, 30], "pack": "ltx", "fast_only": True,
+                    "hd_max_seconds": LTX_HD_MAX_SECONDS},
         },
     }
 
@@ -330,10 +335,12 @@ async def generate(body: dict):
         "aspect": body.get("aspect") or style.get("aspect") or ("16:9" if mode in ("t2v", "i2v") else "1:1"),
         "count": min(4, max(1, int(body.get("count", 1)))),
         "image": body.get("image"),
-        "seconds": min(15, max(5, float(body.get("seconds", 5)))) if engine == "minimax" else min(10, max(1, float(body.get("seconds", 5)))),
+        "seconds": min(15, max(5, float(body.get("seconds", 5)))) if engine == "minimax" else min(LTX_MAX_SECONDS if engine == "ltx" else 10, max(1, float(body.get("seconds", 5)))),
         "resolution": body.get("resolution") if body.get("resolution") in wf.sizes_for(engine) else ("720p" if engine == "ltx" else "480p"),
         "engine": engine,
     }
+    if engine == "ltx" and params["resolution"] == "1080p" and params["seconds"] > LTX_HD_MAX_SECONDS:
+        raise HTTPException(400, f"1080p is limited to {LTX_HD_MAX_SECONDS} seconds. Pick 720p for longer videos.")
     if mode == "edit":  # output follows the photo's shape; aspect is only used for display
         try:
             w, h = await input_size(params["image"])
