@@ -15,7 +15,7 @@ It makes four things:
 
 Both video modes have a **Model** switch: WAN 2.2 makes silent clips; MiniMax H3 generates the picture and a
 matching stereo soundtrack (voices, sound effects, music) together, at 24 fps, 5 to 15 seconds. LTX 2.3 also makes
-video with sound, at 25 fps, 3 to 10 seconds, up to 1080p; it renders a half-size draft, upscales it 2x and refines it,
+video with sound, at 25 fps, 3 to 30 seconds (1080p up to 10 s); it renders a half-size draft, upscales it 2x and refines it,
 and only has a Fast mode. Describe the sound in your prompt. Everything together comes to about 200 GB of disk;
 download only the packs you want.
 

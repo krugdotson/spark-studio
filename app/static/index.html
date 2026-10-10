@@ -455,7 +455,8 @@ function updatePreview() {
 }
 function estimate() {
   if (VIDEO(S.mode) && S.engine === "ltx") {
-    return "Fast mode only (two passes: draft, then 2x upscale). Timings on the Spark haven't been measured yet. First run is slower while models load.";
+    return "Fast mode only. Measured at 720p on a Spark: 5 s takes about 1½ minutes, 20 s about 4, 30 s about 7. " +
+      "480p is quicker, 1080p slower. First run is slower while models load.";
   }
   if (VIDEO(S.mode) && S.engine === "minimax") {
     return (S.fast ? "Turbo mode, 8 steps." : "Full quality, 20 steps; several times slower than Fast.") +
@@ -500,8 +501,11 @@ function renderOpts() {
     const eng = CFG.engines[S.engine];
     if (!eng.seconds.includes(S.seconds)) S.seconds = 5;
     if (!eng.resolutions.includes(S.resolution)) S.resolution = "480p";
+    const resDisabled = eng.hd_max_seconds && S.seconds > eng.hd_max_seconds
+      ? { "1080p": `1080p is limited to ${eng.hd_max_seconds} s` } : {};
+    if (resDisabled[S.resolution]) S.resolution = "720p";
     h += `<div class="opt"><span>Length</span>${seg("seconds", eng.seconds, S.seconds, eng.seconds.map((x) => x + " s"))}</div>`;
-    h += `<div class="opt"><span>Quality</span>${seg("resolution", eng.resolutions, S.resolution)}</div>`;
+    h += `<div class="opt"><span>Quality</span>${seg("resolution", eng.resolutions, S.resolution, null, resDisabled)}</div>`;
   }
   $("#opts").innerHTML = h;
   $("#opts").querySelectorAll("button").forEach((b) => b.onclick = () => {
